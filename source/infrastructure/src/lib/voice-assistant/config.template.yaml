@@ -1,0 +1,197 @@
+global:
+  host: 0.0.0.0
+  port: {{PORT}}
+  verbose: False
+
+rtc:
+  stun_servers: []
+  turn_servers:
+  - protocol: udp
+    port: 3478
+    host: {{STUNNER_LOADBALANCER_HOSTNAME}}
+  - protocol: tcp
+    port: 3480
+    host: {{STUNNER_LOADBALANCER_HOSTNAME}}
+
+voice:
+  # Language of the assistant
+  language: chinese
+  # Enable/disable welcome message
+  greeting_enabled: True
+  # Customize welcome messages as needed - one will be randomly selected when a user connects
+  greeting_messages:
+    chinese:
+      - "您好，承蒙垂询，请问有何贵干？"
+      - "尊敬的贵宾您好，我是您的专属助理{voice}，非常荣幸能为您提供专属服务。"
+      - "您好，我是贴心管家{voice}，无论您需要什么帮助，我都会尽我所能为您解决。"
+      - "您好，欢迎联系客服中心，我是AI助手，请问有什么需要帮助的？"
+      - "您好，我是{voice}，无论您需要什么帮助，我都会尽我所能为您解决。"
+    english:
+      - "Hello, thank you for reaching out. I'm pleased to assist you today."
+      - "Hey there! I'm {voice}, your voice companion. Great to connect with you. What can I help you with?"
+      - "Voice assistant {voice} successfully connected. I'm all ears... well, technically I'm all algorithms, but you get the idea!"
+      - "Good day to you. I'm {voice}, your formal assistant. I appreciate your call. How may I be of service?"
+      - "Hi there! I'm here for you and ready to help with whatever you might need today."
+    japanese:
+      - "こんにちは、ご連絡いただきありがとうございます。{voice}と申します。どのようなご用件でしょうか？"
+      - "やあ！{voice}です。今日はどんなお手伝いをしましょうか？"
+      - "こんにちは、AIアシスタントの{voice}です。何かお困りのことがあれば、ぜひ教えてください。"
+      - "ようこそ。{voice}が専属サポートを担当します。どうぞお気軽にご相談ください。"
+      - "はい、{voice}が応答しました～！今日も元気にサポートしますよ！"
+    korean:
+      - "안녕하세요, 문의해 주셔서 감사합니다. {voice}입니다. 어떻게 도와드릴까요?"
+      - "안녕하세요! 전용 도우미 {voice}에요. 오늘은 어떤 일로 연락 주셨나요?"
+      - "연결 완료! AI 어시스턴트 {voice}입니다. 제게 무엇이든 물어보세요."
+      - "환영합니다. 고객님을 위해 {voice}가 특별 대기 중입니다."
+      - "띵동~ {voice} 등장! 오늘도 고객님의 고민을 날려드릴게요."
+  
+  # Default voice configuration (no modification required)
+  available_voices:
+    - 兰溪
+    - 丝柯克
+    - 久保
+    - 可莉
+    - 凯亚
+    - 伽吠毗陀
+    - 哈里森
+    - 卡维
+  
+  # Voice synthesis instructions - reference available commands in cosyvoice2 demo (use only valid instructions)
+  voice_generation_instruction:
+    - "一位权威、威严的古代将军，声音如洪钟，充满决断力。"
+    - "一个忧郁的诗人，言语中总是透露出一丝哀愁和浪漫"
+    - "一个聪慧的侦探，善于发现细微之处，思维缜密。"
+    - "一个活泼、爱冒险的小精灵，总是带着微笑和奇思妙想。"
+    - "一个天真烂漫的小孩，总是充满幻想和无尽的好奇心。"
+    - "凶猛"
+    - "优雅"
+    - "好奇"
+    - "用四川话说"
+    - "天津话"
+
+  # Enable/disable automatic interruption feature
+  allow_interruption: True
+  expected_audio_layout: mono
+  # Define input audio sample rate
+  audio_input_sample_rate: 16000
+  # Define output audio sample rate
+  audio_output_sample_rate: 16000
+  # Define TEXT-TO-SPEECH output audio sample rate
+  tts_output_sample_rate: 16000
+
+  waiting_message_enabled: True
+  waiting_message_pool:
+    chinese:
+      - "正在为您分析问题，请稍候..."
+      - "系统正在处理您的请求，这可能需要一点时间"
+      - "搜索最佳解决方案中，请耐心等待"
+      - "正在查阅知识库，马上就好..."
+      - "我们的AI专家正在为您定制解决方案"
+      - "正在多维度分析您的问题，确保回答准确"
+      - "为确保回答质量，正在进行深度校验"
+      - "让我好好想想这个问题..."
+      - "正在调取大脑中的知识库，马上回来"
+      - "这个问题很有深度，我需要多花点时间思考"
+      - "别着急，我正在为您准备最完善的答案"
+      - "正在召唤智慧小精灵为您解答..."
+      - "知识咖啡正在冲泡中，请稍等片刻"
+      - "脑细胞全力运转中"
+      - "正在为您打开智慧宝箱..."
+    english:
+      - "We're preparing your response. This may take a moment."
+      - "Analyzing your request, please wait..."
+      - "Processing your query - this may take a moment."
+      - "Searching for the optimal solution..."
+      - "Let me think deeply about this one..."
+      - "Consulting my knowledge banks—be right back!"
+      - "This is a profound question; I need extra time to refine the answer."
+      - "Summoning the wisdom fairies to assist you..."
+      - "Brewing a fresh cup of knowledge—just a sec!"
+      - "Brain cells at full throttle! "
+      - "Don’t worry, I’m crafting the most thorough response for you."
+      - "Quality check in progress to ensure accuracy."
+    japanese:
+      - "お問い合わせを分析中です。少々お待ちください..."
+      - "最適な解決策を検索中です。"
+      - "深く検証を行っていますので、もうしばらくお待ちを。"
+      - "知識の扉を開いています..."
+      - "脳内データベースを全力スキャン中！"
+      - "この質問、じっくり考えさせてくださいね。"
+      - "知恵の玉手箱を開封中..."
+      - "回答を丁寧に仕上げています、あと少し！"
+      - "AI茶を淹れています（急がずに待ってね）"
+      - "頭のなかでパズルを組み立て中！"
+      - "ロボット魂、フルパワーで考え中！"
+    korean:
+      - "요청을 분석 중입니다. 잠시만 기다려주세요..."
+      - "정확한 답변을 위해 심층 검증 중이에요."
+      - "최적의 해결책을 찾고 있어요!"
+      - "지식 창고를 뒤적이는 중..."
+      - "두뇌 풀가동! 조금만 기다려주세요~"
+      - "이 질문, 깊이 고민해 볼게요."
+      - "지혜의 요정들을 소환 중..."
+      - "핵심 답변을 추출하는 중 (커피 추출처럼 섬세하게)"
+      - "AI 뇌세포가 열일하는 중!"
+      - "완벽한 답변을 위해 꼼꼼히 준비하고 있어요."
+      - "조금만 기다리시면 특별한 답변 드릴게요!"
+  audio_prompt_delay_threshold: 3
+  waiting_audio_cues:
+    - "assets/wait_melody_119s.wav"
+    - "assets/wait_melody_138s.wav"
+    - "assets/wait_melody_169s.wav"
+
+  pause_detection_algorithm:
+    # Duration of audio chunks to process (in seconds)
+    audio_chunk_duration: 0.6
+    # Threshold to determine when speech begins
+    started_talking_threshold: 0.2
+    # Threshold to detect ongoing speech
+    speech_threshold: 0.1
+    # Duration threshold (seconds) for semantic analysis. Short segments (< threshold) are verified for 
+    # semantic content, long segments bypass verification.
+    semantic_check_threshold: 1.0
+    # Minimum time-in-seconds the agent must wait after a potential end-of-utterance signal (from VAD model) before it declares the 
+    # user’s turn complete. Default `0.5` s."
+    min_endpointing_delay: 0.5
+    # Maximum time-in-seconds the agent will wait before terminating the turn. Default `2.0` s.
+    max_endpointing_delay: 2
+    # Minimum number of tokens to consider an interruption. Default `1`.
+    min_interruption_tokens: 1
+    # Minimum speech length (s) to register as an interruption. Default `0.5` s.
+    min_interruption_duration: 0.5
+
+  voice_activity_detection_options:
+    # Voice activity detection mode selection:
+    #   - "webrtc_only": Only use WebRTC VAD for voice detection (fastest, moderate accuracy)
+    #   - "silero_only": Only use Silero model for voice detection (slower, highest accuracy)
+    #   - "hybrid": First use WebRTC VAD to filter silence, then process remaining segments with Silero
+    #               (balanced performance, reduces resource usage in quiet environments)
+    # Default: "hybrid"
+    mode: "hybrid"
+    model: Silero
+    # Speech threshold. Silero VAD outputs speech probabilities for each audio chunk,
+    # probabilities ABOVE this value are considered as SPEECH. It is better to tune this
+    # parameter for each dataset separately, but "lazy" 0.5 is pretty good for most datasets.
+    threshold:  0.5
+    # Final speech chunks shorter min_speech_duration_ms are thrown out.
+    min_speech_duration_ms:  250
+    # In the end of each speech chunk wait for min_silence_duration_ms
+    # before separating it
+    min_silence_duration_ms:  2000
+    # Audio chunks of window_size_samples size are fed to the silero VAD model.
+    # WARNING! Silero VAD models were trained using 512, 1024, 1536 samples for 16000 sample rate.
+    # Values other than these may affect model performance!!
+    window_size_samples: 1024
+    # Final speech chunks are padded by speech_pad_ms each side
+    speech_pad_ms: 400
+    # Whether to enable noise reduction. Enabling noise reduction can lower the probability of environmental 
+    # noise triggering voice detection, but may occasionally weaken human voices and cause detection failures.
+    # Please choose based on your usage scenario. Disabled by default.
+    noise_suppression_enabled: False
+    # Sensitivity for the WebRTC Voice Activity Detection engine ranging from 0
+    # (least aggressive / most sensitive) to 3 (most aggressive, least sensitive).
+    webrtcvad_sensitivity: 3
+    # Minimum ratio of frames that must be detected as voiced within the sliding
+    # window to trigger speech segment collection (0.0 to 1.0). Defaults to 0.1 (10%). Higher values
+    # reduce false positives but may clip speech beginnings/endings.
+    webrtcvad_voiced_frame_threshold: 0.1

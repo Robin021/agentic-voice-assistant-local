@@ -1,0 +1,1 @@
+FROM docker.io/l7mp/stunner-gateway-operator:1.1.0

@@ -1,0 +1,8 @@
+
+numpy
+librosa
+pyaudio
+audioop
+pydantic
+argparse
+websockets

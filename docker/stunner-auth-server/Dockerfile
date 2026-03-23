@@ -1,0 +1,1 @@
+FROM docker.io/l7mp/stunner-auth-server:1.1.0

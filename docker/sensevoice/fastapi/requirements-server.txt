@@ -1,0 +1,5 @@
+pysrt
+pydantic
+argparse
+silero_vad
+fastapi[standard]

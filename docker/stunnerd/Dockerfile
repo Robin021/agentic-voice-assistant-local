@@ -1,0 +1,1 @@
+FROM docker.io/l7mp/stunnerd:1.1.0
