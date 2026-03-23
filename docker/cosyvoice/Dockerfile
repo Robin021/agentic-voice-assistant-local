@@ -58,6 +58,7 @@ RUN git clone --recursive https://github.com/FunAudioLLM/CosyVoice.git
 
 RUN conda activate ${VENV} && conda install -y -c conda-forge pynini==2.1.5
 RUN conda activate ${VENV} && cd CosyVoice && \
+    pip install setuptools wheel && \
     pip install -r requirements.txt
 RUN cd CosyVoice && git checkout dev/Comet
 RUN conda activate ${VENV} && \ 
