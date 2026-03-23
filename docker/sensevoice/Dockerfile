@@ -57,7 +57,7 @@ WORKDIR ${HOME_DIR}/workspace
 RUN git clone https://github.com/FunAudioLLM/SenseVoice.git
 
 RUN conda activate ${VENV} && cd SenseVoice && \
-    pip install setuptools wheel && \
+    pip install "setuptools==69.5.1" wheel && \
     pip install -r requirements.txt
 
 COPY --chown=${VENV_NAME}:${VENV_NAME} ./fastapi SenseVoice
