@@ -1,0 +1,84 @@
+version: '3.8'
+
+services:
+  dynamodb-local:
+    image: amazon/dynamodb-local:latest
+    container_name: dynamodb-local
+    ports:
+      - "8000:8000"
+    command: "-jar DynamoDBLocal.jar -sharedDb -dbPath ./data"
+    volumes:
+      - ./dynamodb_data:/home/dynamodblocal/data
+    networks:
+      - voice-network
+
+  stt:
+    image: ghcr.io/robin021/agentic-voice-assistant-local/stt:latest
+    container_name: sensevoice
+    ports:
+      - "50000:50000"
+    command: >
+      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate sensevoice && uvicorn fastapi.server:app --host 0.0.0.0 --port 50000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - voice-network
+
+  tts:
+    image: ghcr.io/robin021/agentic-voice-assistant-local/tts:latest
+    container_name: cosyvoice
+    ports:
+      - "50001:50001"
+    command: >
+      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate cosyvoice && cd async_cosyvoice && uvicorn runtime.fastapi.server:app --host 0.0.0.0 --port 50001"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - voice-network
+
+  coturn:
+    image: coturn/coturn:latest
+    container_name: coturn
+    ports:
+      - "3478:3478"
+      - "3478:3478/udp"
+    command: >
+      turnserver -a -o -v -n --no-dtls --no-tls -u test:test -r myrealm -X "$$(curl -s ifconfig.me)"
+    networks:
+      - voice-network
+
+  voicebot:
+    image: ghcr.io/robin021/agentic-voice-assistant-local/voicebot:latest
+    container_name: voicebot
+    ports:
+      - "8080:8080"
+    environment:
+      - AWS_ACCESS_KEY_ID=dummy
+      - AWS_SECRET_ACCESS_KEY=dummy
+      - AWS_REGION_NAME=us-east-1
+      - DYNAMODB_HOST=http://dynamodb-local:8000
+      - STUNNER_USER=test
+      - STUNNER_PASSWORD=test
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-dummy}
+    command: >
+      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate voicebot && cd backend && uvicorn app:app --host 0.0.0.0 --port 8080"
+    depends_on:
+      - dynamodb-local
+      - stt
+      - tts
+    networks:
+      - voice-network
+
+networks:
+  voice-network:
+    driver: bridge
