@@ -28,8 +28,8 @@ RUN wget --quiet https://github.com/conda-forge/miniforge/releases/latest/downlo
 
 ENV PATH=/opt/conda/bin:$PATH
 
-RUN conda config --add channels conda-forge && \
-    conda config --set channel_priority strict
+RUN conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/ && \
+    conda config --set show_channel_urls yes
 # ------------------------------------------------------------------
 # ~conda
 # ==================================================================
@@ -47,7 +47,7 @@ ENV PATH=/opt/conda/bin:$PATH
 
 RUN conda create -y -n ${VENV} python=3.10
 ENV CONDA_DEFAULT_ENV=${VENV}
-ENV PYTHONPATH="${PYTHONPATH}:${HOME_DIR}/workspace/CosyVoice:${HOME_DIR}/workspace/CosyVoice/third_party/Matcha-TTS"
+ENV PYTHONPATH="${PYTHONPATH:-""}:${HOME_DIR}/workspace/CosyVoice:${HOME_DIR}/workspace/CosyVoice/third_party/Matcha-TTS"
 RUN conda init
 
 RUN mkdir -p ${HOME_DIR}/workspace/
