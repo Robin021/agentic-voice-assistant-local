@@ -47,7 +47,7 @@ ENV PATH=/opt/conda/bin:$PATH
 
 RUN conda create -y -n ${VENV} python=3.10
 ENV CONDA_DEFAULT_ENV=${VENV}
-ENV PYTHONPATH="${PYTHONPATH:-""}:${HOME_DIR}/workspace/CosyVoice:${HOME_DIR}/workspace/CosyVoice/third_party/Matcha-TTS"
+ENV PYTHONPATH="${HOME_DIR}/workspace/CosyVoice:${HOME_DIR}/workspace/CosyVoice/third_party/Matcha-TTS"
 RUN conda init
 
 RUN mkdir -p ${HOME_DIR}/workspace/
@@ -68,8 +68,8 @@ RUN conda activate ${VENV} && \
 WORKDIR ${HOME_DIR}/workspace/CosyVoice
 
 RUN mkdir pretrained_models
-RUN cd pretrained_models && \
-    git clone https://www.modelscope.cn/iic/CosyVoice-300M.git
+RUN conda activate ${VENV} && \
+    modelscope download --model iic/CosyVoice-300M --local_dir pretrained_models/CosyVoice-300M
 
 RUN conda activate ${VENV} && \
     modelscope download --model iic/CosyVoice-ttsfrd --local_dir pretrained_models/CosyVoice-ttsfrd
