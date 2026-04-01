@@ -79,6 +79,7 @@ RUN mkdir -p voice .cache/hub
 COPY --chown=${VENV_NAME}:${VENV_NAME} ./voice voice
 COPY --chown=${VENV_NAME}:${VENV_NAME} frontend.py async_cosyvoice/
 COPY --chown=${VENV_NAME}:${VENV_NAME} config.py async_cosyvoice/
+COPY --chown=${VENV_NAME}:${VENV_NAME} async_cosyvoice.py async_cosyvoice/
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=600s --retries=10 \
   CMD curl -f http://localhost:50001/v1/health || exit 1
