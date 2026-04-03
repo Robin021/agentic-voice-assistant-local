@@ -61,7 +61,8 @@ RUN conda activate ${VENV} && cd SenseVoice && \
     pip install -r requirements.txt
 
 COPY --chown=${VENV_NAME}:${VENV_NAME} ./fastapi SenseVoice
-RUN conda activate ${VENV} && pip install -r SenseVoice/requirements-server.txt
+RUN conda activate ${VENV} && pip install -r SenseVoice/requirements-server.txt && \
+    python -c "f='/var/lib/sensevoice/.conda/envs/sensevoice/lib/python3.10/site-packages/torchaudio/_extension/utils.py'; s=open(f).read(); s=s.replace('torch.ops.load_library(paths[0])', 'try:\n        torch.ops.load_library(paths[0])\n    except Exception:\n        return False'); open(f,'w').write(s)"
 
 WORKDIR ${HOME_DIR}/workspace/SenseVoice
 

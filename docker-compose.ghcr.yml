@@ -18,13 +18,13 @@ services:
     ports:
       - "50000:50000"
     command: >
-      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate sensevoice && uvicorn fastapi.server:app --host 0.0.0.0 --port 50000"
+      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate sensevoice && python -c \"f='/var/lib/sensevoice/.conda/envs/sensevoice/lib/python3.10/site-packages/torchaudio/_extension/utils.py'; s=open(f).read(); s=s.replace('torch.ops.load_library(paths[0])', 'try:\\n        torch.ops.load_library(paths[0])\\n    except Exception:\\n        return False'); open(f,'w').write(s)\" && export LD_LIBRARY_PATH=/usr/local/cuda/lib64:\$LD_LIBRARY_PATH && uvicorn server:app --host 0.0.0.0 --port 50000"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: ['2']
               capabilities: [gpu]
     networks:
       - voice-network
@@ -35,13 +35,13 @@ services:
     ports:
       - "50001:50001"
     command: >
-      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate cosyvoice && cd async_cosyvoice && uvicorn runtime.fastapi.server:app --host 0.0.0.0 --port 50001"
+      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate cosyvoice && pip install vllm -i https://mirrors.aliyun.com/pypi/simple/ && export LD_LIBRARY_PATH=/usr/local/cuda/lib64:\$LD_LIBRARY_PATH && uvicorn async_cosyvoice.runtime.fastapi.server:app --host 0.0.0.0 --port 50001"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              device_ids: ['2']
               capabilities: [gpu]
     networks:
       - voice-network
@@ -53,7 +53,7 @@ services:
       - "3478:3478"
       - "3478:3478/udp"
     command: >
-      turnserver -a -o -v -n --no-dtls --no-tls -u test:test -r myrealm -X "$$(curl -s ifconfig.me)"
+      /bin/sh -c 'turnserver -a -o -v -n --no-dtls --no-tls -u test:test -r myrealm -X $${EXTERNAL_IP:-127.0.0.1}'
     networks:
       - voice-network
 
@@ -71,7 +71,7 @@ services:
       - STUNNER_PASSWORD=test
       - OPENAI_API_KEY=${OPENAI_API_KEY:-dummy}
     command: >
-      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate voicebot && cd backend && uvicorn app:app --host 0.0.0.0 --port 8080"
+      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate voicebot && python -c \"import litellm.main; import re; f=litellm.main.__file__; s=open(f).read(); s=re.sub(r'n*vertex_text_to_speech=Nonen*', '', s); open(f,'w').write(s + chr(10) + 'vertex_text_to_speech=None' + chr(10))\" && cd backend && uvicorn app:app --host 0.0.0.0 --port 8080"
     depends_on:
       - dynamodb-local
       - stt

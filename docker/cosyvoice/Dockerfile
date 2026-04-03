@@ -60,7 +60,8 @@ RUN conda activate ${VENV} && conda install -y -c conda-forge pynini==2.1.5
 RUN conda activate ${VENV} && cd CosyVoice && \
     pip install "setuptools==69.5.1" wheel && \
     pip install --no-build-isolation openai-whisper==20231117 && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt && \
+    pip install vllm -i https://mirrors.aliyun.com/pypi/simple/
 RUN cd CosyVoice && git checkout dev/Comet
 RUN conda activate ${VENV} && \ 
     pip uninstall -y deepspeed

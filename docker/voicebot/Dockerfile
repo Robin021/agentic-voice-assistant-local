@@ -54,7 +54,8 @@ WORKDIR ${HOME_DIR}/workspace
 
 COPY --chown=${VENV_NAME}:${VENV_NAME} source/backend backend
 RUN conda activate ${VENV} && cd backend && \
-    pip install -r requirements.txt
+    pip install -r requirements.txt && \
+    python -c "import litellm.main; f=open(litellm.main.__file__,'a'); f.write('\nvertex_text_to_speech=None\n'); f.close()"
 
 WORKDIR ${HOME_DIR}/workspace
 

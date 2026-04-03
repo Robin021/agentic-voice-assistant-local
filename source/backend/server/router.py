@@ -8,8 +8,11 @@ from functools import partial
 from litellm.main import (
     openai_chat_completions,
     azure_chat_completions,
-    vertex_text_to_speech,
 )
+try:
+    from litellm.main import vertex_text_to_speech
+except ImportError:
+    vertex_text_to_speech = None
 from litellm.utils import client
 from litellm.router import Router as _Router
 from litellm.types.router import GenericLiteLLMParams
@@ -392,20 +395,23 @@ class Router(_Router):
                     logging_obj=logging_obj,  # type: ignore
                     custom_llm_provider=custom_llm_provider,
                 )
-            response = vertex_text_to_speech.audio_speech(
-                _is_async=aspeech,
-                vertex_credentials=vertex_credentials,
-                vertex_project=vertex_ai_project,
-                vertex_location=vertex_ai_location,
-                timeout=timeout,
-                api_base=api_base,
-                model=model,
-                input=input,
-                voice=voice,
-                optional_params=optional_params,
-                kwargs=kwargs,
-                logging_obj=logging_obj,
-            )
+            if vertex_text_to_speech is not None:
+                response = vertex_text_to_speech.audio_speech(
+                    _is_async=aspeech,
+                    vertex_credentials=vertex_credentials,
+                    vertex_project=vertex_ai_project,
+                    vertex_location=vertex_ai_location,
+                    timeout=timeout,
+                    api_base=api_base,
+                    model=model,
+                    input=input,
+                    voice=voice,
+                    optional_params=optional_params,
+                    kwargs=kwargs,
+                    logging_obj=logging_obj,
+                )
+            else:
+                raise ImportError("vertex_text_to_speech is not available in litellm")
         elif custom_llm_provider == "gemini":
             from litellm.endpoints.speech.speech_to_completion_bridge.handler import (
                 speech_to_completion_bridge_handler,
