@@ -26,8 +26,8 @@ RUN wget --quiet "https://github.com/conda-forge/miniforge/releases/latest/downl
 
 ENV PATH=/opt/conda/bin:$PATH
 
-RUN conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/ && \
-    conda config --set show_channel_urls yes
+RUN conda config --add channels conda-forge && \
+    conda config --set channel_priority strict
 # ------------------------------------------------------------------
 # ~conda
 # ==================================================================

@@ -28,8 +28,8 @@ RUN wget --quiet https://github.com/conda-forge/miniforge/releases/latest/downlo
 
 ENV PATH=/opt/conda/bin:$PATH
 
-RUN conda config --add channels https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/ && \
-    conda config --set show_channel_urls yes
+RUN conda config --add channels conda-forge && \
+    conda config --set channel_priority strict
 # ------------------------------------------------------------------
 # ~conda
 # ==================================================================
@@ -61,7 +61,7 @@ RUN conda activate ${VENV} && cd CosyVoice && \
     pip install "setuptools==69.5.1" wheel && \
     pip install --no-build-isolation openai-whisper==20231117 && \
     pip install -r requirements.txt && \
-    pip install vllm -i https://mirrors.aliyun.com/pypi/simple/
+    pip install vllm
 RUN cd CosyVoice && git checkout dev/Comet
 RUN conda activate ${VENV} && \ 
     pip uninstall -y deepspeed
