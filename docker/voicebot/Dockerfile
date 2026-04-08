@@ -45,7 +45,7 @@ ENV PATH=/opt/conda/bin:$PATH
 
 RUN conda create -y -n ${VENV} python=3.13
 ENV CONDA_DEFAULT_ENV=${VENV}
-ENV PYTHONPATH="${PYTHONPATH:-""}:${HOME_DIR}/workspace/backend"
+ENV PYTHONPATH="${HOME_DIR}/workspace/backend"
 RUN conda init
 
 RUN mkdir -p ${HOME_DIR}/workspace/backend
