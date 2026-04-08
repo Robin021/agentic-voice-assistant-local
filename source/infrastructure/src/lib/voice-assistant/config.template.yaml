@@ -45,16 +45,8 @@ voice:
       - "환영합니다. 고객님을 위해 {voice}가 특별 대기 중입니다."
       - "띵동~ {voice} 등장! 오늘도 고객님의 고민을 날려드릴게요."
   
-  # Default voice configuration (no modification required)
-  available_voices:
-    - 兰溪
-    - 丝柯克
-    - 久保
-    - 可莉
-    - 凯亚
-    - 伽吠毗陀
-    - 哈里森
-    - 卡维
+  # Leave empty to auto-discover voices from the configured TTS endpoint.
+  available_voices: []
   
   # Voice synthesis instructions - reference available commands in cosyvoice2 demo (use only valid instructions)
   voice_generation_instruction:

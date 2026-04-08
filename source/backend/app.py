@@ -20,6 +20,26 @@ app = FastAPI(
 )
 
 
+def bootstrap_runtime(config_path: str | None = None) -> None:
+    if getattr(app.state, "runtime_bootstrapped", False):
+        return
+
+    if config_path is not None:
+        configure.load_config_file(config_path=config_path)
+    else:
+        configure.refresh_available_voices(prefer_existing=False)
+
+    load_custom_llm()
+    for deployment in configure.model_list:
+        router.add_deployment(deployment=Deployment(**deployment))  # type: ignore
+
+    app.state.runtime_bootstrapped = True
+
+
+if __name__ != "__main__":
+    bootstrap_runtime()
+
+
 @app.get(f"/", response_class=Response)
 async def check_health():
     return Response()
@@ -53,11 +73,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    configure.load_config_file(config_path=args.config)
-
-    load_custom_llm()
-    for deployment in configure.model_list:
-        router.add_deployment(deployment=Deployment(**deployment))  # type: ignore
+    bootstrap_runtime(config_path=args.config)
 
     logger.info("Starting Voice Assistant server")
     if args.mode == "ui":
