@@ -26,6 +26,8 @@ def bootstrap_runtime(config_path: str | None = None) -> None:
 
     if config_path is not None:
         configure.load_config_file(config_path=config_path)
+    else:
+        configure.refresh_available_voices(prefer_existing=False)
 
     load_custom_llm()
     for deployment in configure.model_list:

@@ -2,6 +2,7 @@ import os
 import json
 import yaml
 import boto3
+import httpx
 import numpy as np
 import logging
 import librosa
@@ -33,6 +34,12 @@ from constants import (
 )
 
 
+DEFAULT_TTS_MODEL = "openai/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
+DEFAULT_TTS_API_BASE = "http://host.docker.internal:8001/v1"
+DEFAULT_TTS_API_KEY = "EMPTY"
+DEFAULT_TTS_VOICES = ["vivian", "ryan", "aiden"]
+
+
 def _get_env_list(name: str, default: list[str]) -> list[str]:
     value = os.environ.get(name, "").strip()
     if not value:
@@ -41,7 +48,106 @@ def _get_env_list(name: str, default: list[str]) -> list[str]:
 
 
 def _get_default_available_voices() -> list[str]:
-    return _get_env_list("TTS_VOICES", ["vivian", "ryan", "aiden"])
+    return _get_env_list("TTS_VOICES", DEFAULT_TTS_VOICES)
+
+
+def _get_default_tts_model() -> str:
+    return os.environ.get("TTS_MODEL", DEFAULT_TTS_MODEL)
+
+
+def _get_default_tts_api_base() -> str:
+    return os.environ.get("TTS_API_BASE", DEFAULT_TTS_API_BASE)
+
+
+def _get_default_tts_api_key() -> str:
+    return os.environ.get("TTS_API_KEY", DEFAULT_TTS_API_KEY)
+
+
+def _get_tts_api_base(model_list: List[DeploymentTypedDict]) -> str:
+    for deployment in model_list:
+        if deployment.get("model_name") != TEXT_TO_SPEECH_MODEL_NAME:
+            continue
+        litellm_params = deployment.get("litellm_params", {})
+        api_base = litellm_params.get("api_base")
+        if isinstance(api_base, str) and api_base.strip():
+            return api_base
+    return _get_default_tts_api_base()
+
+
+def _get_tts_api_key(model_list: List[DeploymentTypedDict]) -> str:
+    for deployment in model_list:
+        if deployment.get("model_name") != TEXT_TO_SPEECH_MODEL_NAME:
+            continue
+        litellm_params = deployment.get("litellm_params", {})
+        api_key = litellm_params.get("api_key")
+        if isinstance(api_key, str) and api_key.strip():
+            return api_key
+    return _get_default_tts_api_key()
+
+
+def _get_tts_voices_endpoint(api_base: str) -> str:
+    normalized_api_base = api_base.rstrip("/")
+    if normalized_api_base.endswith("/audio/voices"):
+        return normalized_api_base
+    if normalized_api_base.endswith("/v1"):
+        return f"{normalized_api_base}/audio/voices"
+    return f"{normalized_api_base}/v1/audio/voices"
+
+
+def _extract_available_voices(payload: Any) -> list[str]:
+    items: list[Any] = []
+    if isinstance(payload, list):
+        items = payload
+    elif isinstance(payload, dict):
+        for key in ("data", "voices", "items"):
+            if isinstance(payload.get(key), list):
+                items = payload[key]
+                break
+        else:
+            items = [payload]
+
+    voices: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        if isinstance(item, str):
+            voice = item.strip()
+        elif isinstance(item, dict):
+            voice = ""
+            for key in ("voice", "id", "name"):
+                value = item.get(key)
+                if isinstance(value, str) and value.strip():
+                    voice = value.strip()
+                    break
+        else:
+            voice = ""
+
+        if voice and voice not in seen:
+            seen.add(voice)
+            voices.append(voice)
+
+    return voices
+
+
+def _fetch_available_voices(model_list: List[DeploymentTypedDict]) -> list[str]:
+    endpoint = _get_tts_voices_endpoint(_get_tts_api_base(model_list))
+    api_key = _get_tts_api_key(model_list)
+    headers = {}
+    if api_key and api_key.upper() != "EMPTY":
+        headers["Authorization"] = f"Bearer {api_key}"
+
+    try:
+        with httpx.Client(timeout=httpx.Timeout(2.0, connect=1.0)) as client:
+            response = client.get(endpoint, headers=headers)
+            response.raise_for_status()
+        voices = _extract_available_voices(response.json())
+        if voices:
+            logger.info("Loaded %s TTS voices from %s", len(voices), endpoint)
+        else:
+            logger.warning("TTS voice discovery returned no usable voices from %s", endpoint)
+        return voices
+    except Exception as exc:
+        logger.warning("Falling back to default TTS voices after discovery failed from %s: %s", endpoint, exc)
+        return []
 
 
 def _get_default_model_list() -> List[DeploymentTypedDict]:
@@ -58,14 +164,9 @@ def _get_default_model_list() -> List[DeploymentTypedDict]:
         {
             "model_name": "text-to-speech",
             "litellm_params": {
-                "model": os.environ.get(
-                    "TTS_MODEL",
-                    "openai/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
-                ),
-                "api_base": os.environ.get(
-                    "TTS_API_BASE", "http://host.docker.internal:8001/v1"
-                ),
-                "api_key": os.environ.get("TTS_API_KEY", "EMPTY"),
+                "model": _get_default_tts_model(),
+                "api_base": _get_default_tts_api_base(),
+                "api_key": _get_default_tts_api_key(),
             },
             "model_info": {"id": "text-to-speech"},
         },
@@ -153,6 +254,21 @@ class Configuration(BaseModel):
         default_factory=_get_default_model_list,
         description="List of models to be used for LiteLLM.",
     )
+
+    def refresh_available_voices(self, prefer_existing: bool = True) -> None:
+        env_voices = _get_env_list("TTS_VOICES", [])
+        if env_voices:
+            self.available_voices = env_voices
+            return
+
+        if prefer_existing and self.available_voices:
+            return
+
+        fetched_voices = _fetch_available_voices(self.model_list)
+        if fetched_voices:
+            self.available_voices = fetched_voices
+        elif not self.available_voices:
+            self.available_voices = DEFAULT_TTS_VOICES.copy()
 
     def load_config_file(self, config_path: str | None = None) -> None:
         """
@@ -278,7 +394,8 @@ class Configuration(BaseModel):
         self.greeting_enabled = voice_settings.get(
             "greeting_enabled", DEFAULT_GREETING_ENABLED
         )
-        self.available_voices = voice_settings.get("available_voices", [])
+        configured_available_voices = voice_settings.get("available_voices")
+        self.available_voices = configured_available_voices or []
         self.voice_generation_instruction = voice_settings.get(
             "voice_generation_instruction", []
         )
@@ -327,6 +444,7 @@ class Configuration(BaseModel):
         self.model_list = config.get("model_list", [])
 
         self.validate_model_references()
+        self.refresh_available_voices(prefer_existing=bool(configured_available_voices))
 
         if self.pause_detection_algorithm.semantic_check_threshold > 0.0:
             if CONTEXT_RELEVANCE_MODEL_NAME not in self.available_models:

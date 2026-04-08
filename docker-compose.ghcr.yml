@@ -18,19 +18,19 @@ services:
     ports:
       - "50000:50000"
     command: >
-      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate sensevoice && python -c \"f='/var/lib/sensevoice/.conda/envs/sensevoice/lib/python3.10/site-packages/torchaudio/_extension/utils.py'; s=open(f).read(); s=s.replace('torch.ops.load_library(paths[0])', 'try:\\n        torch.ops.load_library(paths[0])\\n    except Exception:\\n        return False'); open(f,'w').write(s)\" && export LD_LIBRARY_PATH=/usr/local/cuda/lib64:\$LD_LIBRARY_PATH && uvicorn server:app --host 0.0.0.0 --port 50000"
+      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate sensevoice && python -c 'import pathlib,re; p=pathlib.Path(\"/var/lib/sensevoice/.conda/envs/sensevoice/lib/python3.10/site-packages/torchaudio/_extension/utils.py\"); s=p.read_text(); pattern=r\"(?m)^(?P<indent>[ \\t]*)torch\\.ops\\.load_library\\((?P<target>[^)]+)\\)$\"; repl=lambda m: \"{indent}try:\\n{indent}    torch.ops.load_library({target})\\n{indent}except Exception:\\n{indent}    return False\".format(indent=m.group(\"indent\"), target=m.group(\"target\")); patched, count = re.subn(pattern, repl, s, count=1); assert count == 1, \"torchaudio patch target not found\"; p.write_text(patched)' && export LD_LIBRARY_PATH=/usr/local/cuda/lib64:\$LD_LIBRARY_PATH && uvicorn server:app --host 0.0.0.0 --port 50000"
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['2']
-              capabilities: [gpu]
+              device_ids: [ '2' ]
+              capabilities: [ gpu ]
     networks:
       - voice-network
 
   tts:
-    profiles: ["local-cosyvoice"]
+    profiles: [ "local-cosyvoice" ]
     image: ghcr.io/robin021/agentic-voice-assistant-local/tts:latest
     container_name: cosyvoice
     ports:
@@ -42,13 +42,13 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['2']
-              capabilities: [gpu]
+              device_ids: [ '2' ]
+              capabilities: [ gpu ]
     networks:
       - voice-network
 
   coturn:
-    image: coturn/coturn:latest
+    image: docker.memes.xin/coturn/coturn:latest
     container_name: coturn
     ports:
       - "3478:3478"
@@ -74,7 +74,7 @@ services:
       - TTS_MODEL=${TTS_MODEL:-openai/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice}
       - TTS_API_BASE=${TTS_API_BASE:-http://host.docker.internal:8001/v1}
       - TTS_API_KEY=${TTS_API_KEY:-EMPTY}
-      - TTS_VOICES=${TTS_VOICES:-vivian,ryan,aiden}
+      - TTS_VOICES=${TTS_VOICES:-}
       - TTS_OUTPUT_SAMPLE_RATE=${TTS_OUTPUT_SAMPLE_RATE:-24000}
     extra_hosts:
       - "host.docker.internal:host-gateway"

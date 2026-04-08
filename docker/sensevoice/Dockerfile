@@ -62,7 +62,7 @@ RUN conda activate ${VENV} && cd SenseVoice && \
 
 COPY --chown=${VENV_NAME}:${VENV_NAME} ./fastapi SenseVoice
 RUN conda activate ${VENV} && pip install -r SenseVoice/requirements-server.txt && \
-    python -c "f='/var/lib/sensevoice/.conda/envs/sensevoice/lib/python3.10/site-packages/torchaudio/_extension/utils.py'; s=open(f).read(); s=s.replace('torch.ops.load_library(paths[0])', 'try:\n        torch.ops.load_library(paths[0])\n    except Exception:\n        return False'); open(f,'w').write(s)"
+    python -c 'import pathlib,re; p=pathlib.Path("/var/lib/sensevoice/.conda/envs/sensevoice/lib/python3.10/site-packages/torchaudio/_extension/utils.py"); s=p.read_text(); pattern=r"(?m)^(?P<indent>[ \t]*)torch\.ops\.load_library\((?P<target>[^)]+)\)$"; repl=lambda m: "{indent}try:\n{indent}    torch.ops.load_library({target})\n{indent}except Exception:\n{indent}    return False".format(indent=m.group("indent"), target=m.group("target")); patched, count = re.subn(pattern, repl, s, count=1); assert count == 1, "torchaudio patch target not found"; p.write_text(patched)'
 
 WORKDIR ${HOME_DIR}/workspace/SenseVoice
 
