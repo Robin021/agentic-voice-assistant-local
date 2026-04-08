@@ -35,7 +35,7 @@ services:
     ports:
       - "50001:50001"
     command: >
-      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate cosyvoice && pip install vllm -i https://mirrors.aliyun.com/pypi/simple/ && export LD_LIBRARY_PATH=/usr/local/cuda/lib64:\$LD_LIBRARY_PATH && uvicorn async_cosyvoice.runtime.fastapi.server:app --host 0.0.0.0 --port 50001"
+      /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate cosyvoice && pip install 'vllm' 'numpy==1.26.4' -i https://mirrors.aliyun.com/pypi/simple/ && export LD_LIBRARY_PATH=/usr/local/cuda/lib64:\$LD_LIBRARY_PATH && uvicorn async_cosyvoice.runtime.fastapi.server:app --host 0.0.0.0 --port 50001"
     deploy:
       resources:
         reservations:

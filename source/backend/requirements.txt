@@ -1,7 +1,7 @@
 av
 boto3
 httpx
-numpy
+numpy==1.26.4
 torch
 scipy
 regex

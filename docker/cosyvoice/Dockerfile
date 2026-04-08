@@ -61,7 +61,7 @@ RUN conda activate ${VENV} && cd CosyVoice && \
     pip install "setuptools==69.5.1" wheel && \
     pip install --no-build-isolation openai-whisper==20231117 && \
     pip install -r requirements.txt && \
-    pip install vllm
+    pip install "vllm" "numpy==1.26.4"
 RUN cd CosyVoice && git checkout dev/Comet
 RUN conda activate ${VENV} && \ 
     pip uninstall -y deepspeed
