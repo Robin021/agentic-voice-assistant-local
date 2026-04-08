@@ -1,5 +1,4 @@
 import uuid
-import httpx
 import numpy as np
 import pandas as pd
 import gradio as gr
@@ -13,7 +12,6 @@ from fastrtc import Stream as _Stream, UIArgs
 from fastrtc.webrtc import WebRTC
 from fastrtc.tracks import StreamHandlerImpl
 from fastrtc.websocket import WebSocketHandler
-from litellm.types.router import Deployment
 from pynamodb.exceptions import DoesNotExist
 
 from config import configure
@@ -44,49 +42,23 @@ class Stream(_Stream):
         sample_rate: int = 44100,
         speed: float = 1.0,
     ) -> tuple[int, np.ndarray]:
-        deployment_on_router: Deployment | None = (
-            router.get_deployment_by_model_group_name(
-                model_group_name=TEXT_TO_SPEECH_MODEL_NAME
-            )
+        del reference_file, reference_text, sample_rate
+
+        selected_voice = voice or configure.available_voices[0]
+        response = router.speech(
+            model=TEXT_TO_SPEECH_MODEL_NAME,
+            input=input,
+            voice=selected_voice,
+            instructions=instructions,
+            response_format="wav",
+            speed=speed,
+            stream=False,
         )
-        if deployment_on_router is None:
-            raise ValueError(
-                f"Deployment not found for model group name: {TEXT_TO_SPEECH_MODEL_NAME}"
-            )
 
-        api_base = deployment_on_router.litellm_params.api_base or ""
-        if api_base.endswith("/"):
-            api_base = api_base.rstrip("/")
-        api_base_url = f"{api_base}/audio/inference"
+        with BytesIO(response.content) as audio_file:
+            _audio, sr = sf.read(audio_file)
 
-        params: Dict[str, Any] = dict(
-            url=api_base_url,
-            data=dict(
-                input=input,
-                sample_rate=sample_rate,
-                speed=speed,
-                response_format="wav",
-            ),
-        )
-        if voice:
-            params["data"]["voice"] = voice
-        if instructions:
-            params["data"]["instructions"] = instructions
-        if reference_text:
-            params["data"]["reference_text"] = reference_text
-        if reference_file:
-            with open(reference_file, "rb") as f:
-                params["files"] = dict(reference_file=("audio.wav", f.read()))
-
-        with httpx.Client(timeout=60) as client:
-            response = client.post(**params)
-            response.raise_for_status()
-
-            audio = response.content
-            with BytesIO(audio) as audio_file:
-                _audio, sr = sf.read(audio_file)
-
-            return sr, _audio
+        return sr, _audio
 
     def _generate_default_ui(
         self,

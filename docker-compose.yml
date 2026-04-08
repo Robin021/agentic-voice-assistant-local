@@ -32,6 +32,7 @@ services:
       - voice-network
 
   tts:
+    profiles: ["local-cosyvoice"]
     build:
       context: docker/cosyvoice
       dockerfile: Dockerfile
@@ -76,12 +77,18 @@ services:
       - STUNNER_USER=test
       - STUNNER_PASSWORD=test
       - OPENAI_API_KEY=${OPENAI_API_KEY:-dummy}
+      - TTS_MODEL=${TTS_MODEL:-openai/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice}
+      - TTS_API_BASE=${TTS_API_BASE:-http://host.docker.internal:8001/v1}
+      - TTS_API_KEY=${TTS_API_KEY:-EMPTY}
+      - TTS_VOICES=${TTS_VOICES:-vivian,ryan,aiden}
+      - TTS_OUTPUT_SAMPLE_RATE=${TTS_OUTPUT_SAMPLE_RATE:-24000}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command: >
       /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate voicebot && cd backend && uvicorn app:app --host 0.0.0.0 --port 8080"
     depends_on:
       - dynamodb-local
       - stt
-      - tts
     networks:
       - voice-network
 

@@ -33,6 +33,53 @@ from constants import (
 )
 
 
+def _get_env_list(name: str, default: list[str]) -> list[str]:
+    value = os.environ.get(name, "").strip()
+    if not value:
+        return default.copy()
+    return [item.strip() for item in value.split(",") if item.strip()]
+
+
+def _get_default_available_voices() -> list[str]:
+    return _get_env_list("TTS_VOICES", ["vivian", "ryan", "aiden"])
+
+
+def _get_default_model_list() -> List[DeploymentTypedDict]:
+    return [
+        {
+            "model_name": "automatic-speech-recognition",
+            "litellm_params": {
+                "model": os.environ.get("ASR_MODEL", "openai/sensevoice"),
+                "api_base": os.environ.get("ASR_API_BASE", "http://stt:50000/v1"),
+                "api_key": os.environ.get("ASR_API_KEY", "EMPTY"),
+            },
+            "model_info": {"id": "automatic-speech-recognition"},
+        },
+        {
+            "model_name": "text-to-speech",
+            "litellm_params": {
+                "model": os.environ.get(
+                    "TTS_MODEL",
+                    "openai/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice",
+                ),
+                "api_base": os.environ.get(
+                    "TTS_API_BASE", "http://host.docker.internal:8001/v1"
+                ),
+                "api_key": os.environ.get("TTS_API_KEY", "EMPTY"),
+            },
+            "model_info": {"id": "text-to-speech"},
+        },
+        {
+            "model_name": "basic-llm",
+            "litellm_params": {
+                "model": os.environ.get("BASIC_LLM_MODEL", "gpt-4o"),
+                "api_key": os.environ.get("OPENAI_API_KEY", "dummy"),
+            },
+            "model_info": {"id": "basic-llm"},
+        },
+    ]
+
+
 class Configuration(BaseModel):
     """Configurable fields."""
 
@@ -68,7 +115,8 @@ class Configuration(BaseModel):
     server_rtc_configuration: dict[str, Any] | None = None
 
     available_voices: list[str] = Field(
-        default=[], description="The voice to use when generating the audio"
+        default_factory=_get_default_available_voices,
+        description="The voice to use when generating the audio",
     )
     voice_generation_instruction: list[str] = Field(
         default=[],
@@ -90,7 +138,9 @@ class Configuration(BaseModel):
     expected_audio_layout: Literal["mono", "stereo"] = DEFAULT_EXPECTED_AUDIO_LAYOUT
     audio_input_sample_rate: int = DEFAULT_AUDIO_INPUT_SAMPLE_RATE
     audio_output_sample_rate: int = DEFAULT_AUDIO_OUTPUT_SAMPLE_RATE
-    tts_output_sample_rate: int = DEFAULT_TTS_OUTPUT_SAMPLE_RATE
+    tts_output_sample_rate: int = int(
+        os.environ.get("TTS_OUTPUT_SAMPLE_RATE", DEFAULT_TTS_OUTPUT_SAMPLE_RATE)
+    )
 
     waiting_message_enabled: bool = False
     waiting_message_pool: Dict[str, list[str]] = DEFAULT_WAITING_MESSAGE_POOL
@@ -100,7 +150,8 @@ class Configuration(BaseModel):
     ui: Dict[str, Any] = Field(default_factory=dict)
 
     model_list: List[DeploymentTypedDict] = Field(
-        default=[], description="List of models to be used for LiteLLM."
+        default_factory=_get_default_model_list,
+        description="List of models to be used for LiteLLM.",
     )
 
     def load_config_file(self, config_path: str | None = None) -> None:
@@ -168,23 +219,7 @@ class Configuration(BaseModel):
             stunner_password = os.environ.get("STUNNER_PASSWORD", "test")
 
         if not config.get("model_list") and "model_list" not in locals():
-            config["model_list"] = [
-                {
-                    "model_name": "automatic-speech-recognition",
-                    "litellm_params": {"model": "openai/sensevoice", "api_base": "http://stt:50000/v1"},
-                    "model_info": {"id": "automatic-speech-recognition"}
-                },
-                {
-                    "model_name": "text-to-speech",
-                    "litellm_params": {"model": "openai/cosyvoice", "api_base": "http://tts:50001/v1"},
-                    "model_info": {"id": "text-to-speech"}
-                },
-                {
-                    "model_name": "basic-llm",
-                    "litellm_params": {"model": "gpt-4o", "api_key": os.environ.get("OPENAI_API_KEY", "dummy")},
-                    "model_info": {"id": "basic-llm"}
-                }
-            ]
+            config["model_list"] = _get_default_model_list()
 
         global_settings = config.get("global", {})
         self.host = global_settings.get("host", DEFAULT_HOST)
