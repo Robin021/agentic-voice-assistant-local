@@ -38,6 +38,7 @@ DEFAULT_TTS_MODEL = "openai/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice"
 DEFAULT_TTS_API_BASE = "http://host.docker.internal:8001/v1"
 DEFAULT_TTS_API_KEY = "EMPTY"
 DEFAULT_TTS_VOICES = ["vivian", "ryan", "aiden"]
+DEFAULT_BASIC_LLM_MODEL = "gpt-4o"
 
 
 def _get_env_list(name: str, default: list[str]) -> list[str]:
@@ -61,6 +62,22 @@ def _get_default_tts_api_base() -> str:
 
 def _get_default_tts_api_key() -> str:
     return os.environ.get("TTS_API_KEY", DEFAULT_TTS_API_KEY)
+
+
+def _get_default_basic_llm_model() -> str:
+    return os.environ.get("BASIC_LLM_MODEL", DEFAULT_BASIC_LLM_MODEL)
+
+
+def _get_default_basic_llm_api_base() -> str | None:
+    value = os.environ.get("BASIC_LLM_API_BASE", "").strip()
+    return value or None
+
+
+def _get_default_basic_llm_api_key() -> str:
+    return os.environ.get(
+        "BASIC_LLM_API_KEY",
+        os.environ.get("OPENAI_API_KEY", "dummy"),
+    )
 
 
 def _get_tts_api_base(model_list: List[DeploymentTypedDict]) -> str:
@@ -173,8 +190,13 @@ def _get_default_model_list() -> List[DeploymentTypedDict]:
         {
             "model_name": "basic-llm",
             "litellm_params": {
-                "model": os.environ.get("BASIC_LLM_MODEL", "gpt-4o"),
-                "api_key": os.environ.get("OPENAI_API_KEY", "dummy"),
+                "model": _get_default_basic_llm_model(),
+                "api_key": _get_default_basic_llm_api_key(),
+                **(
+                    {"api_base": _get_default_basic_llm_api_base()}
+                    if _get_default_basic_llm_api_base()
+                    else {}
+                ),
             },
             "model_info": {"id": "basic-llm"},
         },
