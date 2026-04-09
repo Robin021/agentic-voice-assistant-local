@@ -21,6 +21,8 @@ app = FastAPI(
 
 
 def mount_stream_if_needed() -> None:
+    global app
+
     if getattr(app.state, "stream_mounted", False):
         return
 
@@ -35,8 +37,21 @@ def mount_stream_if_needed() -> None:
         server_rtc_configuration=configure.server_rtc_configuration,
         concurrency_limit=5,
         time_limit=None,
+        ui_args={
+            "title": "Realtime Voicebot Playground",
+            "subtitle": "Microphone access requires HTTPS or localhost in most browsers.",
+        },
     )
     stream.mount(app=app)
+
+    import gradio as gr
+
+    app = gr.mount_gradio_app(
+        app,
+        stream.ui,
+        path="/playground",
+        allowed_paths=[CURRENT_DIR],
+    )
     app.state.stream = stream
     app.state.stream_mounted = True
 
@@ -81,6 +96,8 @@ async def check_health():
           <body>
             <h1>Voicebot is running</h1>
             <p>This deployment exposes API and websocket endpoints for the realtime assistant.</p>
+            <p><a href="/playground">Open the interactive playground</a></p>
+            <p><strong>Note:</strong> microphone access usually requires <code>https://</code> or <code>localhost</code>.</p>
             <ul>
               <li><code>POST /webrtc/offer</code></li>
               <li><code>WS /websocket/offer</code></li>
