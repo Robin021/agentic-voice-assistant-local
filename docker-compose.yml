@@ -13,6 +13,7 @@ services:
       - voice-network
 
   stt:
+    profiles: ["local-sensevoice"]
     build:
       context: docker/sensevoice
       dockerfile: Dockerfile
@@ -77,6 +78,9 @@ services:
       - STUNNER_USER=test
       - STUNNER_PASSWORD=test
       - OPENAI_API_KEY=${OPENAI_API_KEY:-dummy}
+      - ASR_MODEL=${ASR_MODEL:-openai/sensevoice}
+      - ASR_API_BASE=${ASR_API_BASE:-http://host.docker.internal:50000/v1}
+      - ASR_API_KEY=${ASR_API_KEY:-EMPTY}
       - TTS_MODEL=${TTS_MODEL:-openai/Qwen/Qwen3-TTS-12Hz-0.6B-CustomVoice}
       - TTS_API_BASE=${TTS_API_BASE:-http://host.docker.internal:8001/v1}
       - TTS_API_KEY=${TTS_API_KEY:-EMPTY}
@@ -88,7 +92,6 @@ services:
       /bin/bash -c "source /opt/conda/etc/profile.d/conda.sh && conda activate voicebot && cd backend && uvicorn app:app --host 0.0.0.0 --port 8080"
     depends_on:
       - dynamodb-local
-      - stt
     networks:
       - voice-network
 
