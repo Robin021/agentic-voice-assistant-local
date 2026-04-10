@@ -126,7 +126,7 @@ voice:
       - "AI 뇌세포가 열일하는 중!"
       - "완벽한 답변을 위해 꼼꼼히 준비하고 있어요."
       - "조금만 기다리시면 특별한 답변 드릴게요!"
-  audio_prompt_delay_threshold: 3
+  audio_prompt_delay_threshold: 1
   waiting_audio_cues:
     - "assets/wait_melody_119s.wav"
     - "assets/wait_melody_138s.wav"
@@ -134,7 +134,7 @@ voice:
 
   pause_detection_algorithm:
     # Duration of audio chunks to process (in seconds)
-    audio_chunk_duration: 0.6
+    audio_chunk_duration: 0.25
     # Threshold to determine when speech begins
     started_talking_threshold: 0.2
     # Threshold to detect ongoing speech
@@ -144,7 +144,7 @@ voice:
     semantic_check_threshold: 1.0
     # Minimum time-in-seconds the agent must wait after a potential end-of-utterance signal (from VAD model) before it declares the 
     # user’s turn complete. Default `0.5` s."
-    min_endpointing_delay: 0.5
+    min_endpointing_delay: 0.3
     # Maximum time-in-seconds the agent will wait before terminating the turn. Default `2.0` s.
     max_endpointing_delay: 2
     # Minimum number of tokens to consider an interruption. Default `1`.
@@ -169,13 +169,13 @@ voice:
     min_speech_duration_ms:  250
     # In the end of each speech chunk wait for min_silence_duration_ms
     # before separating it
-    min_silence_duration_ms:  2000
+    min_silence_duration_ms:  600
     # Audio chunks of window_size_samples size are fed to the silero VAD model.
     # WARNING! Silero VAD models were trained using 512, 1024, 1536 samples for 16000 sample rate.
     # Values other than these may affect model performance!!
     window_size_samples: 1024
     # Final speech chunks are padded by speech_pad_ms each side
-    speech_pad_ms: 400
+    speech_pad_ms: 240
     # Whether to enable noise reduction. Enabling noise reduction can lower the probability of environmental 
     # noise triggering voice detection, but may occasionally weaken human voices and cause detection failures.
     # Please choose based on your usage scenario. Disabled by default.
