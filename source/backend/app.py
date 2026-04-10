@@ -1,11 +1,11 @@
 import os
 import json
-import base64
 import uvicorn
 import argparse
-from fastapi import FastAPI, File, Form, UploadFile
-from fastapi.responses import HTMLResponse, Response
+from fastapi import FastAPI
+from fastapi.responses import HTMLResponse, StreamingResponse
 from litellm.types.router import Deployment
+from pydantic import BaseModel
 
 from llms import load_custom_llm
 from logger import logger
@@ -13,12 +13,7 @@ from config import configure
 from server.stream import Stream
 from server.router import router
 from server.reply_on_pause import ReplyOnPause
-from server.utils import normalize_text
-from constants import (
-    BASIC_LLM_MODEL_NAME,
-    AUTOMATIC_SPEECH_RECOGNITION_MODEL_NAME,
-    TEXT_TO_SPEECH_MODEL_NAME,
-)
+from prompts.template import get_prompt_template
 
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -90,7 +85,7 @@ async def check_health():
             <h1>Voicebot is running</h1>
             <p>This deployment exposes API and websocket endpoints for the realtime assistant.</p>
             <p><a href="/playground">Open the interactive playground</a></p>
-            <p><strong>Note:</strong> the playground below uses text and audio file upload, so it works over plain HTTP.</p>
+            <p><strong>Note:</strong> the playground uses a live microphone over WebRTC. Browser microphone access usually needs <code>https://</code> or <code>localhost</code>.</p>
             <ul>
               <li><code>POST /webrtc/offer</code></li>
               <li><code>WS /websocket/offer</code></li>
@@ -107,6 +102,9 @@ async def check_health():
 @app.get("/playground", response_class=HTMLResponse)
 async def playground():
     voices_json = json.dumps(configure.available_voices, ensure_ascii=False)
+    rtc_configuration_json = json.dumps(
+        configure.server_rtc_configuration or {}, ensure_ascii=False
+    )
     return HTMLResponse(
         f"""
         <!doctype html>
@@ -124,6 +122,7 @@ async def playground():
                 --line: #d7cfc2;
                 --accent: #9d5c2f;
                 --accent-2: #264653;
+                --accent-3: #6c8d2f;
               }}
               * {{ box-sizing: border-box; }}
               body {{
@@ -161,6 +160,12 @@ async def playground():
                 padding: 18px;
                 box-shadow: 0 14px 40px rgba(0, 0, 0, .05);
               }}
+              .hero {{
+                display: grid;
+                grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr);
+                gap: 18px;
+                margin-bottom: 18px;
+              }}
               .card h2 {{
                 margin: 0 0 10px;
                 font-size: 1.25rem;
@@ -171,7 +176,7 @@ async def playground():
                 font-size: .95rem;
                 color: var(--muted);
               }}
-              textarea, select, input[type="file"] {{
+              textarea, select {{
                 width: 100%;
                 border: 1px solid var(--line);
                 border-radius: 12px;
@@ -195,6 +200,7 @@ async def playground():
                 cursor: pointer;
               }}
               button.secondary {{ background: var(--accent-2); }}
+              button.success {{ background: var(--accent-3); }}
               pre {{
                 white-space: pre-wrap;
                 word-break: break-word;
@@ -213,152 +219,290 @@ async def playground():
                 color: var(--muted);
                 min-height: 20px;
               }}
+              .pill {{
+                display: inline-block;
+                padding: 6px 10px;
+                border-radius: 999px;
+                background: #f2e8d9;
+                color: var(--accent);
+                margin: 0 8px 8px 0;
+                font-size: .92rem;
+              }}
+              .controls {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+              }}
+              .chat {{
+                min-height: 320px;
+                max-height: 420px;
+                overflow: auto;
+                display: flex;
+                flex-direction: column;
+                gap: 10px;
+              }}
+              .bubble {{
+                padding: 12px 14px;
+                border-radius: 16px;
+                border: 1px solid var(--line);
+                background: #fff;
+              }}
+              .bubble.user {{
+                background: #f8efe4;
+              }}
+              .bubble.assistant {{
+                background: #f4f7fa;
+              }}
+              .mono {{
+                font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                font-size: .92rem;
+              }}
+              @media (max-width: 860px) {{
+                .hero {{
+                  grid-template-columns: 1fr;
+                }}
+              }}
             </style>
           </head>
           <body>
             <main>
-              <h1>Voicebot Playground</h1>
-              <p class="lead">Use this page to validate the three live chains separately or run a full uploaded-audio roundtrip.</p>
-              <div class="grid">
+              <div class="hero">
                 <section class="card">
-                  <h2>Text -> Reply -> Speech</h2>
-                  <label for="text-input">Prompt</label>
-                  <textarea id="text-input">你好，请做一个简短的自我介绍。</textarea>
-                  <label for="text-voice">Voice</label>
-                  <select id="text-voice"></select>
-                  <button id="text-submit">Generate Reply</button>
-                  <div class="status" id="text-status"></div>
-                  <label>Reply</label>
-                  <pre id="text-output"></pre>
-                  <audio id="text-audio" controls></audio>
-                </section>
-
-                <section class="card">
-                  <h2>Audio File -> Transcript</h2>
-                  <label for="transcribe-file">Audio File</label>
-                  <input id="transcribe-file" type="file" accept="audio/*">
-                  <label for="transcribe-language">Language</label>
-                  <select id="transcribe-language">
-                    <option value="">auto</option>
+                  <h1>Realtime Voicebot Playground</h1>
+                  <p class="lead">This page establishes a live WebRTC session against <code>/webrtc/offer</code> and lets you talk to the assistant in real time.</p>
+                  <span class="pill">Live microphone</span>
+                  <span class="pill">Realtime TTS playback</span>
+                  <span class="pill">Data-channel logs</span>
+                  <label for="voice">Voice</label>
+                  <select id="voice"></select>
+                  <label for="instructions">Voice Instructions</label>
+                  <textarea id="instructions" placeholder="Optional style instructions for TTS"></textarea>
+                  <label for="language">Language</label>
+                  <select id="language">
                     <option value="chinese">chinese</option>
                     <option value="english">english</option>
                     <option value="japanese">japanese</option>
                     <option value="korean">korean</option>
                   </select>
-                  <button id="transcribe-submit" class="secondary">Transcribe</button>
-                  <div class="status" id="transcribe-status"></div>
-                  <label>Transcript</label>
-                  <pre id="transcribe-output"></pre>
+                  <div class="controls">
+                    <button id="start" class="success">Start Realtime Session</button>
+                    <button id="stop" class="secondary">Stop</button>
+                  </div>
+                  <div class="status" id="status">Idle</div>
                 </section>
-
                 <section class="card">
-                  <h2>Audio File -> Full Roundtrip</h2>
-                  <label for="roundtrip-file">Audio File</label>
-                  <input id="roundtrip-file" type="file" accept="audio/*">
-                  <label for="roundtrip-voice">Voice</label>
-                  <select id="roundtrip-voice"></select>
-                  <button id="roundtrip-submit">Run Roundtrip</button>
-                  <div class="status" id="roundtrip-status"></div>
-                  <label>Transcript</label>
-                  <pre id="roundtrip-transcript"></pre>
-                  <label>Reply</label>
-                  <pre id="roundtrip-output"></pre>
-                  <audio id="roundtrip-audio" controls></audio>
+                  <h2>Session Notes</h2>
+                  <p class="lead">Microphone access usually requires <code>https://</code> or <code>localhost</code>. If you are opening a raw public IP over HTTP, the browser may block <code>getUserMedia()</code>.</p>
+                  <pre class="mono" id="notes">Open this page over HTTPS for browser microphone permissions.\nIf audio does not connect, verify TURN/STUN reachability.\nThe assistant conversation will appear in the transcript panel.</pre>
+                  <audio id="remote-audio" autoplay controls playsinline></audio>
+                </section>
+              </div>
+              <div class="grid">
+                <section class="card">
+                  <h2>Conversation</h2>
+                  <div id="chat" class="chat"></div>
+                </section>
+                <section class="card">
+                  <h2>Realtime Logs</h2>
+                  <pre id="log-output" class="mono"></pre>
                 </section>
               </div>
             </main>
             <script>
+              const rtcConfiguration = {rtc_configuration_json};
               const voices = {voices_json};
-              const voiceSelects = [
-                document.getElementById("text-voice"),
-                document.getElementById("roundtrip-voice"),
-              ];
-              for (const select of voiceSelects) {{
-                for (const voice of voices) {{
-                  const option = document.createElement("option");
-                  option.value = voice;
-                  option.textContent = voice;
-                  select.appendChild(option);
+              const voiceSelect = document.getElementById("voice");
+              for (const voice of voices) {{
+                const option = document.createElement("option");
+                option.value = voice;
+                option.textContent = voice;
+                voiceSelect.appendChild(option);
+              }}
+
+              let pc = null;
+              let localStream = null;
+              let dataChannel = null;
+              let webrtcId = null;
+              let updatesSource = null;
+              const statusEl = document.getElementById("status");
+              const logEl = document.getElementById("log-output");
+              const chatEl = document.getElementById("chat");
+              const remoteAudio = document.getElementById("remote-audio");
+
+              function setStatus(text) {{
+                statusEl.textContent = text;
+              }}
+
+              function log(message) {{
+                const line = `[${{new Date().toLocaleTimeString()}}] ${{message}}`;
+                logEl.textContent = line + "\\n" + logEl.textContent;
+              }}
+
+              function renderChat(messages) {{
+                if (!Array.isArray(messages)) return;
+                chatEl.innerHTML = "";
+                for (const message of messages) {{
+                  const bubble = document.createElement("div");
+                  bubble.className = `bubble ${{message.role || "assistant"}}`;
+                  const role = document.createElement("strong");
+                  role.textContent = (message.role || "assistant") + ": ";
+                  const text = document.createElement("span");
+                  text.textContent = message.content || "";
+                  bubble.appendChild(role);
+                  bubble.appendChild(text);
+                  chatEl.appendChild(bubble);
                 }}
+                chatEl.scrollTop = chatEl.scrollHeight;
               }}
 
-              function setAudioSource(el, base64) {{
-                el.src = base64 ? `data:audio/wav;base64,${{base64}}` : "";
+              function openUpdatesStream() {{
+                if (!webrtcId) return;
+                if (updatesSource) {{
+                  updatesSource.close();
+                }}
+                updatesSource = new EventSource(`/playground/outputs?webrtc_id=${{encodeURIComponent(webrtcId)}}`);
+                updatesSource.onmessage = (event) => {{
+                  try {{
+                    const payload = JSON.parse(event.data);
+                    renderChat(payload.messages || payload);
+                  }} catch (error) {{
+                    log(`Failed to parse output stream: ${{error}}`);
+                  }}
+                }};
+                updatesSource.onerror = () => {{
+                  log("Output stream disconnected");
+                }};
               }}
 
-              async function postJson(url, body) {{
-                const response = await fetch(url, {{
+              async function sendInput() {{
+                if (!webrtcId) return;
+                const response = await fetch("/input_hook", {{
                   method: "POST",
                   headers: {{ "Content-Type": "application/json" }},
-                  body: JSON.stringify(body),
+                  body: JSON.stringify({{
+                    webrtc_id: webrtcId,
+                    voice: document.getElementById("voice").value,
+                    instructions: document.getElementById("instructions").value,
+                    language: document.getElementById("language").value,
+                    allow_interruption: true,
+                    noise_suppression_enabled: false
+                  }}),
                 }});
                 if (!response.ok) {{
                   throw new Error(await response.text());
                 }}
-                return response.json();
               }}
 
-              document.getElementById("text-submit").onclick = async () => {{
-                const status = document.getElementById("text-status");
-                status.textContent = "Generating...";
+              function stopSession() {{
+                if (updatesSource) {{
+                  updatesSource.close();
+                  updatesSource = null;
+                }}
+                if (pc) {{
+                  if (pc.getTransceivers) {{
+                    pc.getTransceivers().forEach((transceiver) => {{
+                      if (transceiver.stop) transceiver.stop();
+                    }});
+                  }}
+                  if (pc.getSenders) {{
+                    pc.getSenders().forEach((sender) => {{
+                      if (sender.track && sender.track.stop) sender.track.stop();
+                    }});
+                  }}
+                  setTimeout(() => pc.close(), 200);
+                }}
+                if (localStream) {{
+                  localStream.getTracks().forEach((track) => track.stop());
+                }}
+                pc = null;
+                localStream = null;
+                dataChannel = null;
+                webrtcId = null;
+                setStatus("Stopped");
+                log("Session stopped");
+              }}
+
+              async function startSession() {{
+                stopSession();
+                setStatus("Requesting microphone...");
                 try {{
-                  const data = await postJson("/api/playground/text-roundtrip", {{
-                    text: document.getElementById("text-input").value,
-                    voice: document.getElementById("text-voice").value,
+                  if (!window.isSecureContext) {{
+                    throw new Error("Browser microphone access requires HTTPS or localhost.");
+                  }}
+                  webrtcId = Math.random().toString(36).slice(2);
+                  pc = new RTCPeerConnection(rtcConfiguration);
+                  localStream = await navigator.mediaDevices.getUserMedia({{
+                    audio: {{
+                      echoCancellation: true,
+                      noiseSuppression: true,
+                      autoGainControl: true,
+                    }},
+                    video: false,
                   }});
-                  document.getElementById("text-output").textContent = data.reply_text;
-                  setAudioSource(document.getElementById("text-audio"), data.audio_base64);
-                  status.textContent = "Done";
-                }} catch (err) {{
-                  status.textContent = String(err);
-                }}
-              }};
 
-              document.getElementById("transcribe-submit").onclick = async () => {{
-                const fileInput = document.getElementById("transcribe-file");
-                const status = document.getElementById("transcribe-status");
-                if (!fileInput.files.length) {{
-                  status.textContent = "Choose an audio file first.";
-                  return;
-                }}
-                status.textContent = "Transcribing...";
-                try {{
-                  const form = new FormData();
-                  form.append("file", fileInput.files[0]);
-                  form.append("language", document.getElementById("transcribe-language").value);
-                  const response = await fetch("/api/playground/transcribe", {{ method: "POST", body: form }});
-                  if (!response.ok) throw new Error(await response.text());
-                  const data = await response.json();
-                  document.getElementById("transcribe-output").textContent = data.transcript;
-                  status.textContent = "Done";
-                }} catch (err) {{
-                  status.textContent = String(err);
-                }}
-              }};
+                  localStream.getTracks().forEach((track) => pc.addTrack(track, localStream));
 
-              document.getElementById("roundtrip-submit").onclick = async () => {{
-                const fileInput = document.getElementById("roundtrip-file");
-                const status = document.getElementById("roundtrip-status");
-                if (!fileInput.files.length) {{
-                  status.textContent = "Choose an audio file first.";
-                  return;
-                }}
-                status.textContent = "Running full roundtrip...";
-                try {{
-                  const form = new FormData();
-                  form.append("file", fileInput.files[0]);
-                  form.append("voice", document.getElementById("roundtrip-voice").value);
-                  const response = await fetch("/api/playground/audio-roundtrip", {{ method: "POST", body: form }});
-                  if (!response.ok) throw new Error(await response.text());
-                  const data = await response.json();
-                  document.getElementById("roundtrip-transcript").textContent = data.transcript;
-                  document.getElementById("roundtrip-output").textContent = data.reply_text;
-                  setAudioSource(document.getElementById("roundtrip-audio"), data.audio_base64);
-                  status.textContent = "Done";
+                  pc.addEventListener("track", (event) => {{
+                    if (remoteAudio.srcObject !== event.streams[0]) {{
+                      remoteAudio.srcObject = event.streams[0];
+                      log("Remote audio track attached");
+                    }}
+                  }});
+
+                  dataChannel = pc.createDataChannel("text");
+                  dataChannel.onopen = async () => {{
+                    log("Data channel open");
+                    openUpdatesStream();
+                    await sendInput();
+                  }};
+                  dataChannel.onmessage = async (event) => {{
+                    let payload = null;
+                    try {{
+                      payload = JSON.parse(event.data);
+                    }} catch (error) {{
+                      log(`Raw message: ${{event.data}}`);
+                      return;
+                    }}
+                    if (payload.type === "send_input") {{
+                      log("Server requested input sync");
+                      await sendInput();
+                      return;
+                    }}
+                    if (payload.type === "fetch_output") {{
+                      log("Server reported new conversation output");
+                      return;
+                    }}
+                    log(`${{payload.type}}: ${{typeof payload.data === "string" ? payload.data : JSON.stringify(payload.data)}}`);
+                  }};
+
+                  const offer = await pc.createOffer();
+                  await pc.setLocalDescription(offer);
+                  setStatus("Connecting...");
+                  const response = await fetch("/webrtc/offer", {{
+                    method: "POST",
+                    headers: {{ "Content-Type": "application/json" }},
+                    body: JSON.stringify({{
+                      sdp: offer.sdp,
+                      type: offer.type,
+                      webrtc_id: webrtcId,
+                    }}),
+                  }});
+                  const answer = await response.json();
+                  if (answer.status === "failed") {{
+                    throw new Error(JSON.stringify(answer.meta));
+                  }}
+                  await pc.setRemoteDescription(answer);
+                  setStatus("Live");
+                  log("WebRTC session established");
                 }} catch (err) {{
-                  status.textContent = String(err);
+                  setStatus(String(err));
+                  log(`Error: ${{err}}`);
+                  stopSession();
                 }}
-              }};
+              }}
+
+              document.getElementById("start").onclick = startSession;
+              document.getElementById("stop").onclick = stopSession;
             </script>
           </body>
         </html>
@@ -366,84 +510,51 @@ async def playground():
     )
 
 
-@app.post("/api/playground/text-roundtrip")
-async def playground_text_roundtrip(payload: dict):
-    text = str(payload.get("text", "")).strip()
-    if not text:
-        return {"reply_text": "", "audio_base64": ""}
-
-    voice = str(payload.get("voice", "")).strip() or configure.available_voices[0]
-    response = await router.acompletion(
-        model=BASIC_LLM_MODEL_NAME,
-        messages=[
-            {"role": "system", "content": "You are a concise and helpful voice assistant."},
-            {"role": "user", "content": text},
-        ],
-        stream=False,
-    )
-    reply_text = response.choices[0].message.content or ""
-    speech = await router.aspeech(
-        model=TEXT_TO_SPEECH_MODEL_NAME,
-        input=normalize_text(reply_text),
-        voice=voice,
-        response_format="wav",
-        stream=False,
-    )
-    return {
-        "reply_text": reply_text,
-        "audio_base64": base64.b64encode(speech.content).decode("utf-8"),
-    }
+class PlaygroundInput(BaseModel):
+    webrtc_id: str
+    voice: str | None = None
+    instructions: str | None = None
+    language: str | None = None
+    allow_interruption: bool = True
+    noise_suppression_enabled: bool = False
 
 
-@app.post("/api/playground/transcribe")
-async def playground_transcribe(
-    file: UploadFile = File(...),
-    language: str = Form(default=""),
-):
-    audio_bytes = await file.read()
-    response = await router.atranscription(
-        model=AUTOMATIC_SPEECH_RECOGNITION_MODEL_NAME,
-        file=audio_bytes,
-        language=language or None,
-        stream=False,
+@app.post("/input_hook")
+async def input_hook(payload: PlaygroundInput):
+    app.state.stream.set_input(
+        payload.webrtc_id,
+        get_prompt_template("assistant"),
+        payload.webrtc_id,
+        payload.voice or configure.available_voices[0],
+        payload.instructions,
+        payload.language or configure.language.value,
+        payload.allow_interruption,
+        payload.noise_suppression_enabled,
     )
-    return {"transcript": response.text.strip() if response.text else ""}
+    return {"ok": True}
 
 
-@app.post("/api/playground/audio-roundtrip")
-async def playground_audio_roundtrip(
-    file: UploadFile = File(...),
-    voice: str = Form(default=""),
-):
-    selected_voice = voice.strip() or configure.available_voices[0]
-    audio_bytes = await file.read()
-    transcription = await router.atranscription(
-        model=AUTOMATIC_SPEECH_RECOGNITION_MODEL_NAME,
-        file=audio_bytes,
-        stream=False,
-    )
-    transcript = transcription.text.strip() if transcription.text else ""
-    response = await router.acompletion(
-        model=BASIC_LLM_MODEL_NAME,
-        messages=[
-            {"role": "system", "content": "You are a concise and helpful voice assistant."},
-            {"role": "user", "content": transcript},
-        ],
-        stream=False,
-    )
-    reply_text = response.choices[0].message.content or ""
-    speech = await router.aspeech(
-        model=TEXT_TO_SPEECH_MODEL_NAME,
-        input=normalize_text(reply_text),
-        voice=selected_voice,
-        response_format="wav",
-        stream=False,
-    )
-    return {
-        "transcript": transcript,
-        "reply_text": reply_text,
-        "audio_base64": base64.b64encode(speech.content).decode("utf-8"),
-    }
+def _serialize_additional_output(output) -> str:
+    payload = output
+    if hasattr(output, "args"):
+        args = list(output.args)
+        payload = args[0] if len(args) == 1 else args
+
+    if isinstance(payload, dict):
+        normalized = payload
+    else:
+        normalized = {"messages": payload}
+
+    return json.dumps(normalized, ensure_ascii=False)
+
+
+@app.get("/playground/outputs")
+async def playground_outputs(webrtc_id: str):
+    async def event_stream():
+        async for output in app.state.stream.output_stream(webrtc_id):
+            yield f"data: {_serialize_additional_output(output)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
 
 
 if __name__ == "__main__":
