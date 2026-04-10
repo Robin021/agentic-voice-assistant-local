@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   dynamodb-local:
-    image: public.ecr.aws/aws-dynamodb-local/aws-dynamodb-local:latest
+    image: ${DYNAMODB_IMAGE:-public.ecr.aws/aws-dynamodb-local/aws-dynamodb-local:latest}
     container_name: dynamodb-local
     ports:
       - "8000:8000"
@@ -14,9 +14,12 @@ services:
 
   stt:
     profiles: ["local-sensevoice"]
+    image: ${STT_IMAGE:-agentic-voice-assistant-local/stt:local}
     build:
       context: docker/sensevoice
       dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${SENSEVOICE_BASE_IMAGE:-nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04}
     container_name: sensevoice
     ports:
       - "50000:50000"
@@ -34,9 +37,12 @@ services:
 
   tts:
     profiles: ["local-cosyvoice"]
+    image: ${TTS_IMAGE:-agentic-voice-assistant-local/tts:local}
     build:
       context: docker/cosyvoice
       dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: ${COSYVOICE_BASE_IMAGE:-nvidia/cuda:12.4.1-cudnn-devel-ubuntu22.04}
     container_name: cosyvoice
     ports:
       - "50001:50001"
@@ -53,7 +59,7 @@ services:
       - voice-network
 
   coturn:
-    image: coturn/coturn:latest
+    image: ${COTURN_IMAGE:-coturn/coturn:latest}
     container_name: coturn
     ports:
       - "3478:3478"
@@ -64,12 +70,17 @@ services:
       - voice-network
 
   voicebot:
+    image: ${VOICEBOT_IMAGE:-agentic-voice-assistant-local/voicebot:local}
     build:
       context: .
       dockerfile: docker/voicebot/Dockerfile
+      args:
+        BASE_IMAGE: ${VOICEBOT_BASE_IMAGE:-ubuntu:24.04}
     container_name: voicebot
     ports:
       - "8080:8080"
+    volumes:
+      - ./backend-config.yaml:/var/lib/voicebot/workspace/backend/config.yaml:ro
     environment:
       - AWS_ACCESS_KEY_ID=dummy
       - AWS_SECRET_ACCESS_KEY=dummy

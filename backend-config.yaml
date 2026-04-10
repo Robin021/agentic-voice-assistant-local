@@ -1,0 +1,42 @@
+global:
+  host: 0.0.0.0
+  port: 8080
+  verbose: False
+
+rtc:
+  stun_servers: []
+  turn_servers: []
+
+voice:
+  language: chinese
+  greeting_enabled: True
+  available_voices: []
+  allow_interruption: True
+  expected_audio_layout: mono
+  audio_input_sample_rate: 16000
+  audio_output_sample_rate: 16000
+  tts_output_sample_rate: 16000
+  waiting_message_enabled: True
+  audio_prompt_delay_threshold: 1
+
+  pause_detection_algorithm:
+    audio_chunk_duration: 0.25
+    started_talking_threshold: 0.2
+    speech_threshold: 0.1
+    semantic_check_threshold: 1.0
+    min_endpointing_delay: 0.3
+    max_endpointing_delay: 2
+    min_interruption_tokens: 1
+    min_interruption_duration: 0.5
+
+  voice_activity_detection_options:
+    mode: hybrid
+    model: Silero
+    threshold: 0.5
+    min_speech_duration_ms: 250
+    min_silence_duration_ms: 600
+    window_size_samples: 1024
+    speech_pad_ms: 240
+    noise_suppression_enabled: False
+    webrtcvad_sensitivity: 3
+    webrtcvad_voiced_frame_threshold: 0.1
