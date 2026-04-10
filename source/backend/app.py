@@ -234,6 +234,23 @@ async def playground():
                 flex-wrap: wrap;
                 gap: 10px;
               }}
+              .toggle-row {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 12px;
+                margin-top: 12px;
+              }}
+              .toggle {{
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                color: var(--muted);
+                font-size: .95rem;
+              }}
+              .toggle input {{
+                width: auto;
+                margin: 0;
+              }}
               .chat {{
                 min-height: 320px;
                 max-height: 420px;
@@ -258,8 +275,48 @@ async def playground():
                 font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
                 font-size: .92rem;
               }}
+              .metrics {{
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
+                margin-top: 14px;
+              }}
+              .metric {{
+                border: 1px solid var(--line);
+                border-radius: 14px;
+                padding: 12px;
+                background: #fff;
+              }}
+              .metric label {{
+                margin: 0 0 6px;
+                font-size: .82rem;
+                letter-spacing: .04em;
+                text-transform: uppercase;
+              }}
+              .metric strong {{
+                display: block;
+                font-size: 1rem;
+              }}
+              .state-badge {{
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 12px;
+                border-radius: 999px;
+                border: 1px solid var(--line);
+                background: #fff;
+                width: fit-content;
+              }}
+              .state-idle {{ color: #6f675d; }}
+              .state-listening {{ color: #264653; }}
+              .state-thinking {{ color: #9d5c2f; }}
+              .state-speaking {{ color: #2a6f3e; }}
+              .state-interrupted {{ color: #b24a2c; }}
               @media (max-width: 860px) {{
                 .hero {{
+                  grid-template-columns: 1fr;
+                }}
+                .metrics {{
                   grid-template-columns: 1fr;
                 }}
               }}
@@ -285,6 +342,16 @@ async def playground():
                     <option value="japanese">japanese</option>
                     <option value="korean">korean</option>
                   </select>
+                  <div class="toggle-row">
+                    <label class="toggle" for="allow-interruption">
+                      <input id="allow-interruption" type="checkbox" checked>
+                      Allow interruption
+                    </label>
+                    <label class="toggle" for="noise-suppression-enabled">
+                      <input id="noise-suppression-enabled" type="checkbox">
+                      Noise suppression
+                    </label>
+                  </div>
                   <div class="controls">
                     <button id="start" class="success">Start Realtime Session</button>
                     <button id="stop" class="secondary">Stop</button>
@@ -293,8 +360,26 @@ async def playground():
                 </section>
                 <section class="card">
                   <h2>Session Notes</h2>
-                  <p class="lead">Microphone access usually requires <code>https://</code> or <code>localhost</code>. If you are opening a raw public IP over HTTP, the browser may block <code>getUserMedia()</code>.</p>
-                  <pre class="mono" id="notes">Open this page over HTTPS for browser microphone permissions.\nIf audio does not connect, verify TURN/STUN reachability.\nThe assistant conversation will appear in the transcript panel.</pre>
+                  <p class="lead">This page is tuned for interruption tests. Start with a long question, then cut back in while the assistant is still speaking.</p>
+                  <pre class="mono" id="notes">Open this page over HTTPS for browser microphone permissions.\nIf audio does not connect, verify TURN/STUN reachability.\nTo test barge-in: ask for a long answer, wait until TTS starts, then interrupt with a short follow-up.</pre>
+                  <div class="metrics">
+                    <div class="metric">
+                      <label>Current State</label>
+                      <strong id="phase-badge" class="state-badge state-idle">idle</strong>
+                    </div>
+                    <div class="metric">
+                      <label>Interruptions</label>
+                      <strong id="interrupt-count">0</strong>
+                    </div>
+                    <div class="metric">
+                      <label>Transport</label>
+                      <strong>webrtc</strong>
+                    </div>
+                    <div class="metric">
+                      <label>Last Event</label>
+                      <strong id="last-event">none</strong>
+                    </div>
+                  </div>
                   <audio id="remote-audio" autoplay controls playsinline></audio>
                 </section>
               </div>
@@ -325,10 +410,15 @@ async def playground():
               let dataChannel = null;
               let webrtcId = null;
               let updatesSource = null;
+              let currentPhase = "idle";
+              let interruptionCount = 0;
               const statusEl = document.getElementById("status");
               const logEl = document.getElementById("log-output");
               const chatEl = document.getElementById("chat");
               const remoteAudio = document.getElementById("remote-audio");
+              const phaseBadgeEl = document.getElementById("phase-badge");
+              const interruptCountEl = document.getElementById("interrupt-count");
+              const lastEventEl = document.getElementById("last-event");
 
               function setStatus(text) {{
                 statusEl.textContent = text;
@@ -337,6 +427,34 @@ async def playground():
               function log(message) {{
                 const line = `[${{new Date().toLocaleTimeString()}}] ${{message}}`;
                 logEl.textContent = line + "\\n" + logEl.textContent;
+              }}
+
+              function markEvent(label) {{
+                lastEventEl.textContent = `${{new Date().toLocaleTimeString()}} ${label}`;
+              }}
+
+              function setPhase(phase, detail = "") {{
+                currentPhase = phase;
+                phaseBadgeEl.textContent = phase;
+                phaseBadgeEl.className = `state-badge state-${{phase}}`;
+                setStatus(detail || phase);
+              }}
+
+              function bumpInterruptions(reason) {{
+                interruptionCount += 1;
+                interruptCountEl.textContent = String(interruptionCount);
+                setPhase("interrupted", reason || "Interrupted");
+              }}
+
+              function syncControlsOnChange(ids) {{
+                for (const id of ids) {{
+                  const element = document.getElementById(id);
+                  element.addEventListener("change", () => {{
+                    if (webrtcId) {{
+                      sendInput().catch((error) => log(`Control sync failed: ${{error}}`));
+                    }}
+                  }});
+                }}
               }}
 
               function renderChat(messages) {{
@@ -366,6 +484,12 @@ async def playground():
                   try {{
                     const payload = JSON.parse(event.data);
                     renderChat(payload.messages || payload);
+                    const lastMessage = Array.isArray(payload.messages || payload)
+                      ? (payload.messages || payload).at(-1)
+                      : null;
+                    if (lastMessage && lastMessage.role === "user") {{
+                      setPhase("thinking", "User turn captured");
+                    }}
                   }} catch (error) {{
                     log(`Failed to parse output stream: ${{error}}`);
                   }}
@@ -385,13 +509,14 @@ async def playground():
                     voice: document.getElementById("voice").value,
                     instructions: document.getElementById("instructions").value,
                     language: document.getElementById("language").value,
-                    allow_interruption: true,
-                    noise_suppression_enabled: false
+                    allow_interruption: document.getElementById("allow-interruption").checked,
+                    noise_suppression_enabled: document.getElementById("noise-suppression-enabled").checked
                   }}),
                 }});
                 if (!response.ok) {{
                   throw new Error(await response.text());
                 }}
+                markEvent("input_synced");
               }}
 
               function stopSession() {{
@@ -419,13 +544,16 @@ async def playground():
                 localStream = null;
                 dataChannel = null;
                 webrtcId = null;
-                setStatus("Stopped");
+                setPhase("idle", "Stopped");
                 log("Session stopped");
               }}
 
               async function startSession() {{
                 stopSession();
-                setStatus("Requesting microphone...");
+                interruptionCount = 0;
+                interruptCountEl.textContent = "0";
+                markEvent("session_start_requested");
+                setPhase("idle", "Requesting microphone...");
                 try {{
                   if (!window.isSecureContext) {{
                     throw new Error("Browser microphone access requires HTTPS or localhost.");
@@ -447,12 +575,29 @@ async def playground():
                     if (remoteAudio.srcObject !== event.streams[0]) {{
                       remoteAudio.srcObject = event.streams[0];
                       log("Remote audio track attached");
+                      markEvent("remote_audio_attached");
                     }}
                   }});
+                  remoteAudio.onplaying = () => {{
+                    setPhase("speaking", "Assistant speaking");
+                    markEvent("assistant_audio_playing");
+                  }};
+                  remoteAudio.onpause = () => {{
+                    if (currentPhase === "speaking") {{
+                      setPhase("listening", "Waiting for next turn");
+                    }}
+                  }};
+                  remoteAudio.onended = () => {{
+                    if (currentPhase === "speaking") {{
+                      setPhase("listening", "Assistant finished");
+                    }}
+                  }};
 
                   dataChannel = pc.createDataChannel("text");
                   dataChannel.onopen = async () => {{
                     log("Data channel open");
+                    markEvent("data_channel_open");
+                    setPhase("listening", "Connected");
                     openUpdatesStream();
                     await sendInput();
                   }};
@@ -466,12 +611,34 @@ async def playground():
                     }}
                     if (payload.type === "send_input") {{
                       log("Server requested input sync");
+                      markEvent("send_input_requested");
                       await sendInput();
                       return;
                     }}
                     if (payload.type === "fetch_output") {{
                       log("Server reported new conversation output");
+                      markEvent("fetch_output");
                       return;
+                    }}
+                    if (payload.type === "log" && typeof payload.data === "string") {{
+                      markEvent(payload.data);
+                      if (payload.data === "started_talking") {{
+                        if ((currentPhase === "speaking" || currentPhase === "thinking") && document.getElementById("allow-interruption").checked) {{
+                          bumpInterruptions("User barged in");
+                          window.setTimeout(() => {{
+                            if (currentPhase === "interrupted") {{
+                              setPhase("listening", "User speaking");
+                            }}
+                          }}, 900);
+                          return;
+                        }}
+                        setPhase("listening", "User speaking");
+                        return;
+                      }}
+                      if (payload.data === "pause_detected") {{
+                        setPhase("thinking", "Processing new turn");
+                        return;
+                      }}
                     }}
                     log(`${{payload.type}}: ${{typeof payload.data === "string" ? payload.data : JSON.stringify(payload.data)}}`);
                   }};
@@ -493,10 +660,11 @@ async def playground():
                     throw new Error(JSON.stringify(answer.meta));
                   }}
                   await pc.setRemoteDescription(answer);
-                  setStatus("Live");
+                  setPhase("listening", "Live");
+                  markEvent("webrtc_connected");
                   log("WebRTC session established");
                 }} catch (err) {{
-                  setStatus(String(err));
+                  setPhase("idle", String(err));
                   log(`Error: ${{err}}`);
                   stopSession();
                 }}
@@ -504,6 +672,12 @@ async def playground():
 
               document.getElementById("start").onclick = startSession;
               document.getElementById("stop").onclick = stopSession;
+              syncControlsOnChange([
+                "voice",
+                "language",
+                "allow-interruption",
+                "noise-suppression-enabled",
+              ]);
             </script>
           </body>
         </html>
@@ -663,11 +837,51 @@ async def websocket_playground():
                 font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
                 font-size: .92rem;
               }}
+              .metrics {{
+                display: grid;
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+                gap: 12px;
+                margin-top: 14px;
+              }}
+              .metric {{
+                border: 1px solid var(--line);
+                border-radius: 14px;
+                padding: 12px;
+                background: #fff;
+              }}
+              .metric label {{
+                margin: 0 0 6px;
+                font-size: .82rem;
+                letter-spacing: .04em;
+                text-transform: uppercase;
+              }}
+              .metric strong {{
+                display: block;
+                font-size: 1rem;
+              }}
+              .state-badge {{
+                display: inline-flex;
+                align-items: center;
+                gap: 8px;
+                padding: 8px 12px;
+                border-radius: 999px;
+                border: 1px solid var(--line);
+                background: #fff;
+                width: fit-content;
+              }}
+              .state-idle {{ color: #6e665d; }}
+              .state-listening {{ color: #3b5161; }}
+              .state-thinking {{ color: #8d4f1f; }}
+              .state-speaking {{ color: #566b2f; }}
+              .state-interrupted {{ color: #b24a2c; }}
               a.inline-link {{
                 color: var(--accent);
               }}
               @media (max-width: 860px) {{
                 .hero {{
+                  grid-template-columns: 1fr;
+                }}
+                .metrics {{
                   grid-template-columns: 1fr;
                 }}
               }}
@@ -693,6 +907,16 @@ async def websocket_playground():
                     <option value="japanese">japanese</option>
                     <option value="korean">korean</option>
                   </select>
+                  <div class="toggle-row">
+                    <label class="toggle" for="ws-allow-interruption">
+                      <input id="ws-allow-interruption" type="checkbox" checked>
+                      Allow interruption
+                    </label>
+                    <label class="toggle" for="ws-noise-suppression-enabled">
+                      <input id="ws-noise-suppression-enabled" type="checkbox">
+                      Noise suppression
+                    </label>
+                  </div>
                   <div class="controls">
                     <button id="ws-start" class="success">Start WebSocket Session</button>
                     <button id="ws-stop" class="secondary">Stop</button>
@@ -701,8 +925,26 @@ async def websocket_playground():
                 </section>
                 <section class="card">
                   <h2>Why This Exists</h2>
-                  <p class="lead">This bypasses TURN and ICE. If the WebRTC page fails because of network negotiation, this page gives you a second realtime transport to isolate the problem.</p>
-                  <pre class="mono" id="ws-notes">WebSocket transport avoids WebRTC negotiation, but browser microphone access still usually needs HTTPS or localhost.\nIf this page works and WebRTC does not, the issue is likely ICE/TURN/networking rather than ASR/TTS/LLM.\nOpen the <a class="inline-link" href="/playground">WebRTC playground</a> to compare both paths.</pre>
+                  <p class="lead">This page is also tuned for interruption tests. If it behaves correctly while WebRTC does not, the transport is the likely difference.</p>
+                  <pre class="mono" id="ws-notes">WebSocket transport avoids WebRTC negotiation, but browser microphone access still usually needs HTTPS or localhost.\nIf this page works and WebRTC does not, the issue is likely ICE/TURN/networking rather than ASR/TTS/LLM.\nFor barge-in: start a long reply, then speak again while audio is still coming back.</pre>
+                  <div class="metrics">
+                    <div class="metric">
+                      <label>Current State</label>
+                      <strong id="ws-phase-badge" class="state-badge state-idle">idle</strong>
+                    </div>
+                    <div class="metric">
+                      <label>Interruptions</label>
+                      <strong id="ws-interrupt-count">0</strong>
+                    </div>
+                    <div class="metric">
+                      <label>Transport</label>
+                      <strong>websocket</strong>
+                    </div>
+                    <div class="metric">
+                      <label>Last Event</label>
+                      <strong id="ws-last-event">none</strong>
+                    </div>
+                  </div>
                 </section>
               </div>
               <div class="grid">
@@ -737,10 +979,15 @@ async def websocket_playground():
               let processorNode = null;
               let audioQueue = [];
               let isPlaying = false;
+              let currentPhase = "idle";
+              let interruptionCount = 0;
 
               const statusEl = document.getElementById("ws-status");
               const logEl = document.getElementById("ws-log-output");
               const chatEl = document.getElementById("ws-chat");
+              const phaseBadgeEl = document.getElementById("ws-phase-badge");
+              const interruptCountEl = document.getElementById("ws-interrupt-count");
+              const lastEventEl = document.getElementById("ws-last-event");
 
               function setStatus(text) {{
                 statusEl.textContent = text;
@@ -749,6 +996,34 @@ async def websocket_playground():
               function log(message) {{
                 const line = `[${{new Date().toLocaleTimeString()}}] ${{message}}`;
                 logEl.textContent = line + "\\n" + logEl.textContent;
+              }}
+
+              function markEvent(label) {{
+                lastEventEl.textContent = `${{new Date().toLocaleTimeString()}} ${label}`;
+              }}
+
+              function setPhase(phase, detail = "") {{
+                currentPhase = phase;
+                phaseBadgeEl.textContent = phase;
+                phaseBadgeEl.className = `state-badge state-${{phase}}`;
+                setStatus(detail || phase);
+              }}
+
+              function bumpInterruptions(reason) {{
+                interruptionCount += 1;
+                interruptCountEl.textContent = String(interruptionCount);
+                setPhase("interrupted", reason || "Interrupted");
+              }}
+
+              function syncControlsOnChange(ids) {{
+                for (const id of ids) {{
+                  const element = document.getElementById(id);
+                  element.addEventListener("change", () => {{
+                    if (websocketId) {{
+                      sendInput().catch((error) => log(`Control sync failed: ${{error}}`));
+                    }}
+                  }});
+                }}
               }}
 
               function renderChat(messages) {{
@@ -849,6 +1124,9 @@ async def websocket_playground():
                 const buffer = outputContext.createBuffer(1, floatSamples.length, outputSampleRate);
                 buffer.copyToChannel(floatSamples, 0);
                 audioQueue.push(buffer);
+                if (currentPhase !== "interrupted") {{
+                  setPhase("speaking", "Assistant speaking");
+                }}
                 if (!isPlaying) {{
                   playNextBuffer();
                 }}
@@ -857,6 +1135,9 @@ async def websocket_playground():
               function playNextBuffer() {{
                 if (!outputContext || audioQueue.length === 0) {{
                   isPlaying = false;
+                  if (ws && ws.readyState === WebSocket.OPEN && currentPhase === "speaking") {{
+                    setPhase("listening", "Waiting for next turn");
+                  }}
                   return;
                 }}
                 isPlaying = true;
@@ -877,6 +1158,12 @@ async def websocket_playground():
                   try {{
                     const payload = JSON.parse(event.data);
                     renderChat(payload.messages || payload);
+                    const lastMessage = Array.isArray(payload.messages || payload)
+                      ? (payload.messages || payload).at(-1)
+                      : null;
+                    if (lastMessage && lastMessage.role === "user") {{
+                      setPhase("thinking", "User turn captured");
+                    }}
                   }} catch (error) {{
                     log(`Failed to parse output stream: ${{error}}`);
                   }}
@@ -896,13 +1183,14 @@ async def websocket_playground():
                     voice: document.getElementById("ws-voice").value,
                     instructions: document.getElementById("ws-instructions").value,
                     language: document.getElementById("ws-language").value,
-                    allow_interruption: true,
-                    noise_suppression_enabled: false
+                    allow_interruption: document.getElementById("ws-allow-interruption").checked,
+                    noise_suppression_enabled: document.getElementById("ws-noise-suppression-enabled").checked
                   }}),
                 }});
                 if (!response.ok) {{
                   throw new Error(await response.text());
                 }}
+                markEvent("input_synced");
               }}
 
               function cleanupAudioGraph() {{
@@ -945,13 +1233,16 @@ async def websocket_playground():
                 outputContext = null;
                 audioQueue = [];
                 isPlaying = false;
-                setStatus("Stopped");
+                setPhase("idle", "Stopped");
                 log("Session stopped");
               }}
 
               async function startSession() {{
                 stopSession();
-                setStatus("Requesting microphone...");
+                interruptionCount = 0;
+                interruptCountEl.textContent = "0";
+                markEvent("session_start_requested");
+                setPhase("idle", "Requesting microphone...");
                 try {{
                   if (!window.isSecureContext) {{
                     throw new Error("Browser microphone access requires HTTPS or localhost.");
@@ -988,9 +1279,10 @@ async def websocket_playground():
                       websocket_id: websocketId
                     }}));
                     log("WebSocket opened");
+                    markEvent("websocket_open");
                     openUpdatesStream();
                     await sendInput();
-                    setStatus("Live");
+                    setPhase("listening", "Live");
                   }};
 
                   processorNode.onaudioprocess = (event) => {{
@@ -1016,25 +1308,50 @@ async def websocket_playground():
                     }}
                     if (data.type === "send_input") {{
                       log("Server requested input sync");
+                      markEvent("send_input_requested");
                       await sendInput();
                       return;
                     }}
                     if (data.type === "fetch_output") {{
                       log("Server reported new conversation output");
+                      markEvent("fetch_output");
+                      return;
+                    }}
+                    if (data.type === "log" && typeof data.data === "string") {{
+                      markEvent(data.data);
+                      if (data.data === "started_talking") {{
+                        if ((currentPhase === "speaking" || currentPhase === "thinking") && document.getElementById("ws-allow-interruption").checked) {{
+                          bumpInterruptions("User barged in");
+                          window.setTimeout(() => {{
+                            if (currentPhase === "interrupted") {{
+                              setPhase("listening", "User speaking");
+                            }}
+                          }}, 900);
+                          return;
+                        }}
+                        setPhase("listening", "User speaking");
+                        return;
+                      }}
+                      if (data.data === "pause_detected") {{
+                        setPhase("thinking", "Processing new turn");
+                        return;
+                      }}
                       return;
                     }}
                     log(JSON.stringify(data));
                   }};
 
                   ws.onerror = () => {{
+                    markEvent("websocket_error");
                     log("WebSocket error");
                   }};
 
                   ws.onclose = () => {{
+                    markEvent("websocket_closed");
                     log("WebSocket closed");
                   }};
                 }} catch (err) {{
-                  setStatus(String(err));
+                  setPhase("idle", String(err));
                   log(`Error: ${{err}}`);
                   stopSession();
                 }}
@@ -1042,6 +1359,12 @@ async def websocket_playground():
 
               document.getElementById("ws-start").onclick = startSession;
               document.getElementById("ws-stop").onclick = stopSession;
+              syncControlsOnChange([
+                "ws-voice",
+                "ws-language",
+                "ws-allow-interruption",
+                "ws-noise-suppression-enabled",
+              ]);
             </script>
           </body>
         </html>
