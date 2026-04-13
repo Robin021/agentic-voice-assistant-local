@@ -260,6 +260,11 @@ Now generate a new unique version in {self.language}.
         logger.debug("setting args in audio callback %s", args)
         self.latest_args = list(args)
         self.args_set.set()
+        normalized_args = self.latest_args[1:8] if len(self.latest_args) >= 8 else self.latest_args[:7]
+        if len(normalized_args) != 7:
+            raise ValueError(
+                f"Unexpected input args for ReplyOnPause.set_args: expected 7 values, got {len(normalized_args)} from {self.latest_args}"
+            )
         (
             self.system_prompts,
             self.conversation_id,
@@ -268,7 +273,7 @@ Now generate a new unique version in {self.language}.
             self.language,
             self.can_interrupt,
             self.noise_suppression_enabled,
-        ) = self.latest_args[1:8]
+        ) = normalized_args
 
         if self.noise_suppression_enabled is True:
             self.min_endpointing_delay = min(
