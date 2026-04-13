@@ -1,12 +1,19 @@
+# syntax=docker/dockerfile:1.7
+
 ARG BASE_IMAGE=ubuntu:24.04
 FROM ${BASE_IMAGE}
 
 ARG VENV_NAME="voicebot"
+ARG PIP_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+ARG PIP_TRUSTED_HOST=pypi.tuna.tsinghua.edu.cn
 ENV VENV=$VENV_NAME
 ENV LANG=C.UTF-8 LC_ALL=C.UTF-8
 
 ENV DEBIAN_FRONTEN=noninteractive
 ENV PYTHONUNBUFFERED=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+ENV PIP_INDEX_URL=${PIP_INDEX_URL}
+ENV PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST}
 SHELL ["/bin/bash", "--login", "-c"]
 
 RUN apt-get update -y --fix-missing
@@ -53,10 +60,12 @@ RUN mkdir -p ${HOME_DIR}/workspace/backend
 
 WORKDIR ${HOME_DIR}/workspace
 
-COPY --chown=${VENV_NAME}:${VENV_NAME} source/backend backend
-RUN conda activate ${VENV} && cd backend && \
+COPY --chown=${VENV_NAME}:${VENV_NAME} source/backend/requirements.txt backend/requirements.txt
+RUN --mount=type=cache,target=${HOME_DIR}/.cache/pip,uid=1001,gid=1001 \
+    conda activate ${VENV} && cd backend && \
     pip install -r requirements.txt && \
     python -c "import litellm.main; f=open(litellm.main.__file__,'a'); f.write('\nvertex_text_to_speech=None\n'); f.close()"
+COPY --chown=${VENV_NAME}:${VENV_NAME} source/backend backend
 
 WORKDIR ${HOME_DIR}/workspace
 
