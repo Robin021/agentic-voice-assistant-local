@@ -430,7 +430,7 @@ async def playground():
               }}
 
               function markEvent(label) {{
-                lastEventEl.textContent = `${{new Date().toLocaleTimeString()}} ${label}`;
+                lastEventEl.textContent = `${{new Date().toLocaleTimeString()}} ${{label}}`;
               }}
 
               function setPhase(phase, detail = "") {{
@@ -999,7 +999,7 @@ async def websocket_playground():
               }}
 
               function markEvent(label) {{
-                lastEventEl.textContent = `${{new Date().toLocaleTimeString()}} ${label}`;
+                lastEventEl.textContent = `${{new Date().toLocaleTimeString()}} ${{label}}`;
               }}
 
               function setPhase(phase, detail = "") {{
