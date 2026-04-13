@@ -3,6 +3,7 @@ import json
 import uvicorn
 import argparse
 from fastapi import FastAPI
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import HTMLResponse, StreamingResponse
 from litellm.types.router import Deployment
 from pydantic import BaseModel
@@ -1407,7 +1408,7 @@ def _serialize_additional_output(output) -> str:
     else:
         normalized = {"messages": payload}
 
-    return json.dumps(normalized, ensure_ascii=False)
+    return json.dumps(jsonable_encoder(normalized), ensure_ascii=False)
 
 
 @app.get("/playground/outputs")
