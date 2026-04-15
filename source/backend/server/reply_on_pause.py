@@ -110,6 +110,7 @@ class ReplyOnPause(AsyncStreamHandler):
         self.waiting_audio_cues = configure.waiting_audio_cues
         self.waiting_message_pool = configure.waiting_message_pool
         self.prompt_delay_threshold = configure.audio_prompt_delay_threshold
+        self.greeting_message = configure.greeting_message.strip()
         self.chunk_size = int(self.tts_output_sample_rate * 0.1)
 
         self.interrupted: asyncio.Event = asyncio.Event()
@@ -165,35 +166,8 @@ class ReplyOnPause(AsyncStreamHandler):
             attributes=dict(conversation_id=self.conversation_id),
         )
 
-        if configure.greeting_enabled is True:
-            messages = apply_prompt(
-                system_prompts=self.system_prompts,
-                messages=[
-                    HumanMessage(
-                        content=f"""Generate a unique welcome message in {self.language} that:
-1. Starts with a culturally appropriate greeting
-2. Clearly states your identity from system prompt
-3. Mentions 1-2 key capabilities from system prompt
-4. Uses simple, natural phrasing (8-15 words)
-5. Varies phrasing each time using these techniques:
-   - Alternate between formal/casual greetings
-   - Rotate through 3-5 capability keywords
-   - Use synonym substitution for "assistant"
-   - Vary sentence structure patterns
-
-Now generate a new unique version in {self.language}.
-"""
-                    )
-                ],
-            )
-            response = await router.acompletion(
-                model=BASIC_LLM_MODEL_NAME,
-                messages=messages,
-                stream=False,
-            )
-            greeting_message: str = response.choices[0].message.content  # type: ignore
-
-            self.conversation.add_ai_message(message=greeting_message)
+        if configure.greeting_enabled is True and self.greeting_message:
+            self.conversation.add_ai_message(message=self.greeting_message)
 
             await self.output_queue.put(
                 AdditionalOutputs([x.model_dump() for x in self.conversation.messages])
@@ -206,8 +180,8 @@ Now generate a new unique version in {self.language}.
                     context=set_span_in_context(self.session_span),
                 ),
                 opcode=Opcode.TEXT,
-                transcript=greeting_message,
-                data=greeting_message,
+                transcript=self.greeting_message,
+                data=self.greeting_message,
                 fin=True,
             )
             event.add_event(name=EventName.USER_STOPPED_TALKING.value)

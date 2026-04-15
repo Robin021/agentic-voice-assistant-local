@@ -10,6 +10,7 @@ rtc:
 voice:
   language: chinese
   greeting_enabled: True
+  greeting_message: 您好，我是助手，解答准确简洁。
   available_voices:
     - aiden
     - eric

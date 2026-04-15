@@ -18,6 +18,12 @@ DEFAULT_TTS_OUTPUT_SAMPLE_RATE = 16000
 DEFAULT_EXPECTED_AUDIO_LAYOUT = "mono"
 
 DEFAULT_GREETING_ENABLED = True
+DEFAULT_GREETING_MESSAGES = dict(
+    chinese="您好，我是助手，解答准确简洁。",
+    english="Hello, I am your assistant. I will keep answers clear and concise.",
+    japanese="こんにちは、アシスタントです。簡潔かつ正確にお答えします。",
+    korean="안녕하세요, 도우미입니다. 정확하고 간결하게 답변드릴게요.",
+)
 
 DEFAULT_WAITING_MESSAGE_POOL = dict(
     chinese=[

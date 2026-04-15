@@ -28,6 +28,7 @@ from constants import (
     DEFAULT_TTS_OUTPUT_SAMPLE_RATE,
     DEFAULT_EXPECTED_AUDIO_LAYOUT,
     DEFAULT_GREETING_ENABLED,
+    DEFAULT_GREETING_MESSAGES,
     DEFAULT_WAITING_MESSAGE_POOL,
     DEFAULT_AUDIO_PROMPT_DELAY_THRESHOLD,
     DEFAULT_WAITING_AUDIO_CUES,
@@ -77,6 +78,29 @@ def _get_default_basic_llm_api_key() -> str:
     return os.environ.get(
         "BASIC_LLM_API_KEY",
         os.environ.get("OPENAI_API_KEY", "dummy"),
+    )
+
+
+def _get_default_greeting_message() -> str:
+    return os.environ.get(
+        "GREETING_MESSAGE",
+        DEFAULT_GREETING_MESSAGES[Language.CHINESE.value],
+    )
+
+
+def _resolve_greeting_message(
+    language: Language, configured_value: str | None = None
+) -> str:
+    if configured_value is not None and str(configured_value).strip():
+        return str(configured_value).strip()
+
+    env_value = os.environ.get("GREETING_MESSAGE", "").strip()
+    if env_value:
+        return env_value
+
+    return DEFAULT_GREETING_MESSAGES.get(
+        language.value,
+        DEFAULT_GREETING_MESSAGES[Language.ENGLISH.value],
     )
 
 
@@ -233,6 +257,10 @@ class Configuration(BaseModel):
     greeting_enabled: bool = Field(
         default=DEFAULT_GREETING_ENABLED,
         description="Whether to enable greeting after connected",
+    )
+    greeting_message: str = Field(
+        default_factory=_get_default_greeting_message,
+        description="Greeting spoken immediately after connection is established",
     )
 
     server_rtc_configuration: dict[str, Any] | None = None
@@ -415,6 +443,10 @@ class Configuration(BaseModel):
         self.language = Language(voice_settings.get("language", "chinese"))
         self.greeting_enabled = voice_settings.get(
             "greeting_enabled", DEFAULT_GREETING_ENABLED
+        )
+        self.greeting_message = _resolve_greeting_message(
+            self.language,
+            voice_settings.get("greeting_message"),
         )
         configured_available_voices = voice_settings.get("available_voices")
         self.available_voices = configured_available_voices or []
