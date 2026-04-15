@@ -81,6 +81,42 @@ def _get_default_basic_llm_api_key() -> str:
     )
 
 
+def _parse_optional_bool(name: str) -> bool | None:
+    raw_value = os.environ.get(name, "").strip().lower()
+    if not raw_value:
+        return None
+    if raw_value in {"1", "true", "yes", "on"}:
+        return True
+    if raw_value in {"0", "false", "no", "off"}:
+        return False
+    raise ValueError(
+        f"Invalid boolean value for {name}: {raw_value}. Use true/false."
+    )
+
+
+def _get_default_basic_llm_extra_body() -> dict[str, Any] | None:
+    raw_json = os.environ.get("BASIC_LLM_EXTRA_BODY_JSON", "").strip()
+    if raw_json:
+        payload = json.loads(raw_json)
+        if not isinstance(payload, dict):
+            raise ValueError("BASIC_LLM_EXTRA_BODY_JSON must decode to a JSON object")
+        return payload
+
+    enable_thinking = _parse_optional_bool("BASIC_LLM_ENABLE_THINKING")
+    if enable_thinking is None:
+        return None
+
+    style = os.environ.get("BASIC_LLM_THINKING_STYLE", "vllm").strip().lower()
+    if style == "dashscope":
+        return {"enable_thinking": enable_thinking}
+    if style == "vllm":
+        return {"chat_template_kwargs": {"enable_thinking": enable_thinking}}
+
+    raise ValueError(
+        "BASIC_LLM_THINKING_STYLE must be either 'vllm' or 'dashscope'"
+    )
+
+
 def _get_default_greeting_message() -> str:
     return os.environ.get(
         "GREETING_MESSAGE",
@@ -192,6 +228,7 @@ def _fetch_available_voices(model_list: List[DeploymentTypedDict]) -> list[str]:
 
 
 def _get_default_model_list() -> List[DeploymentTypedDict]:
+    basic_llm_extra_body = _get_default_basic_llm_extra_body()
     return [
         {
             "model_name": "automatic-speech-recognition",
@@ -219,6 +256,11 @@ def _get_default_model_list() -> List[DeploymentTypedDict]:
                 **(
                     {"api_base": _get_default_basic_llm_api_base()}
                     if _get_default_basic_llm_api_base()
+                    else {}
+                ),
+                **(
+                    {"extra_body": basic_llm_extra_body}
+                    if basic_llm_extra_body is not None
                     else {}
                 ),
             },
